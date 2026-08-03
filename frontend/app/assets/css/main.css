@@ -184,11 +184,25 @@
       padding-top: 18px;
       border-top: 1px solid var(--border);
     }
-    .cookie-row input[type="file"] {
-      font-size: var(--fs-sm);
-      color: var(--muted);
-      flex: 1 1 240px;
+    .cookie-row input[type="file"].file-input-hidden,
+    .file-input-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .cookie-file-picker {
+      flex: 1 1 280px;
       min-height: var(--touch);
+      min-width: 200px;
+      padding: 14px 24px;
+      justify-content: center;
+      text-align: center;
     }
     .cookie-platforms {
       display: flex;

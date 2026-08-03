@@ -35,7 +35,8 @@ function domainMatchesPlatform(domain: string, platform: CookiePlatform): boolea
   return false
 }
 
-export function detectPlatformFromUrl(url: string): CookiePlatform | null {
+export function detectPlatformFromUrl(url: string | undefined): CookiePlatform | null {
+  if (!url) return null
   try {
     const host = new URL(url).hostname.toLowerCase()
     if (host.includes('bilibili.com') || host.endsWith('b23.tv')) {
@@ -87,8 +88,8 @@ export function useCookieStore() {
     }
   }
 
-  function updateCookieWarningForUrl(url: string) {
-    const platform = detectPlatformFromUrl(url.trim())
+  function updateCookieWarningForUrl(url: string | undefined) {
+    const platform = detectPlatformFromUrl((url ?? '').trim())
     if (!platform) {
       showCookieWarning.value = false
       return
