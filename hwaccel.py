@@ -3,6 +3,7 @@ hwaccel.py — ffmpeg H.264 硬體編碼器偵測與參數預設
 """
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
@@ -10,6 +11,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import config
+
+logger = logging.getLogger("bili2vrchat.hwaccel")
 
 ENCODER_PRESETS: dict[str, tuple[str, list[str], str | None]] = {
     # name -> (label, video_args after -c:v, optional hw video filter suffix)
@@ -141,18 +144,25 @@ def detect_video_encoder() -> VideoEncoder:
     forced = (config.HW_ENCODER or "auto").strip().lower()
     if forced and forced != "auto":
         if forced in ENCODER_PRESETS:
+            logger.info("encoder forced: %s", forced)
             return _make_encoder(forced, fallback=(forced == "libx264"))
+        logger.warning("unknown HW_ENCODER=%s, falling back to libx264", forced)
         return _make_encoder("libx264", fallback=True)
 
     available = _list_ffmpeg_encoders()
     candidates = PLATFORM_CANDIDATES.get(_platform_key(), [])
+    logger.debug("probing encoders: platform=%s candidates=%s", _platform_key(), candidates)
     for name in candidates:
         if not _encoder_available(name, available):
+            logger.debug("encoder skip (unavailable): %s", name)
             continue
         label, video_args, hw_video_filter = ENCODER_PRESETS[name]
         if _smoke_test_encoder(name, video_args, hw_video_filter):
+            logger.info("encoder selected: %s (%s)", name, label)
             return _make_encoder(name)
+        logger.debug("encoder smoke test failed: %s", name)
 
+    logger.info("encoder fallback: libx264 (software)")
     return _make_encoder("libx264", fallback=True)
 
 

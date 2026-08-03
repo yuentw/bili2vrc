@@ -350,6 +350,45 @@
       color: var(--muted);
       margin-top: 6px;
     }
+    #videoMeta {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 10px;
+      padding: 12px;
+    }
+    .video-meta-inner {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    #videoThumb {
+      width: 160px;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+    .video-meta-text {
+      flex: 1;
+      min-width: 0;
+    }
+    #videoTitle {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.4;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
+    .video-meta-sub {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
@@ -370,6 +409,20 @@
         <button class="btn btn-primary" id="fetchBtn" onclick="fetchFormats()">獲取格式</button>
       </div>
       <div id="cookieWarning">⚠ 未找到 cookies/bilibili.txt，若影片需要登入將無法下載</div>
+    </div>
+  </div>
+
+  <!-- 影片資訊 -->
+  <div id="videoMeta">
+    <div class="video-meta-inner">
+      <img id="videoThumb" alt="" referrerpolicy="no-referrer">
+      <div class="video-meta-text">
+        <div id="videoTitle"></div>
+        <div class="video-meta-sub">
+          <div id="videoUploader"></div>
+          <div id="videoDuration"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -509,6 +562,7 @@ async function fetchFormats() {
   btn.disabled = true;
   btn.textContent = '載入中...';
   document.getElementById('fmtCount').textContent = '';
+  document.getElementById('videoMeta').style.display = 'none';
 
   selectedFormat = null;
   document.getElementById('processBtn').disabled = true;
@@ -529,7 +583,8 @@ async function fetchFormats() {
       return;
     }
 
-    renderFormats(data.formats || [], data.title);
+    renderVideoMeta(data);
+    renderFormats(data.formats || []);
     document.getElementById('cookieWarning').style.display = data.cookie_ok ? 'none' : 'block';
 
   } catch (e) {
@@ -540,7 +595,34 @@ async function fetchFormats() {
   }
 }
 
-function renderFormats(formats, title) {
+function renderVideoMeta(data) {
+  const box = document.getElementById('videoMeta');
+  const thumb = document.getElementById('videoThumb');
+  const title = (data.title || '').trim();
+  if (!title && !data.thumbnail) {
+    box.style.display = 'none';
+    return;
+  }
+
+  document.getElementById('videoTitle').textContent = title || '（無標題）';
+  document.getElementById('videoUploader').textContent =
+    data.uploader ? `UP主：${data.uploader}` : '';
+  document.getElementById('videoDuration').textContent =
+    data.duration_formatted ? `時長：${data.duration_formatted}` : '';
+
+  if (data.thumbnail) {
+    thumb.src = data.thumbnail;
+    thumb.alt = title || '影片縮圖';
+    thumb.style.display = '';
+  } else {
+    thumb.removeAttribute('src');
+    thumb.style.display = 'none';
+  }
+
+  box.style.display = 'block';
+}
+
+function renderFormats(formats) {
   if (!formats.length) {
     setBody('<tr><td colspan="5" class="empty-hint">未找到可用格式</td></tr>');
     return;

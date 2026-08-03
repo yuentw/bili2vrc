@@ -374,6 +374,42 @@
       color: #316ac5;
       margin-top: 4px;
     }
+    #videoMeta {
+      display: none;
+      background: #fff;
+      border: 2px solid;
+      border-color: #fff #aca899 #aca899 #fff;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .video-meta-inner {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    #videoThumb {
+      width: 128px;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      border: 2px solid;
+      border-color: #707070 #d4d0c8 #d4d0c8 #707070;
+      background: #000;
+      flex-shrink: 0;
+    }
+    .video-meta-text { flex: 1; min-width: 0; }
+    #videoTitle {
+      font-size: 12px;
+      font-weight: bold;
+      color: #0a246a;
+      line-height: 1.4;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .video-meta-sub {
+      font-size: 11px;
+      color: #444;
+      line-height: 1.5;
+    }
 
     /* ── Divider ── */
     .xp-hr { border: none; border-top: 1px solid #aca899; border-bottom: 1px solid #fff; margin: 8px 0; }
@@ -477,6 +513,20 @@
 
     <!-- Body -->
     <div class="xp-body">
+
+      <!-- Video meta -->
+      <div id="videoMeta">
+        <div class="video-meta-inner">
+          <img id="videoThumb" alt="" referrerpolicy="no-referrer">
+          <div class="video-meta-text">
+            <div id="videoTitle"></div>
+            <div class="video-meta-sub">
+              <div id="videoUploader"></div>
+              <div id="videoDuration"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Format list -->
       <div class="xp-panel">
@@ -640,6 +690,7 @@ async function fetchFormats() {
   const btn = document.getElementById('fetchBtn');
   btn.disabled = true; btn.textContent = '載入中...';
   document.getElementById('fmtCount').textContent = '';
+  document.getElementById('videoMeta').style.display = 'none';
   selectedFormat = null;
   document.getElementById('processBtn').disabled = true;
   document.getElementById('selInfo').textContent = '尚未選擇格式';
@@ -658,6 +709,7 @@ async function fetchFormats() {
       setStatus('錯誤：取得格式失敗');
       return;
     }
+    renderVideoMeta(data);
     renderFormats(data.formats || []);
     const ok = data.cookie_ok;
     document.getElementById('cookieWarning').style.display = ok ? 'none' : 'flex';
@@ -669,6 +721,33 @@ async function fetchFormats() {
   } finally {
     btn.disabled = false; btn.textContent = '🔍 獲取格式(G)';
   }
+}
+
+function renderVideoMeta(data) {
+  const box = document.getElementById('videoMeta');
+  const thumb = document.getElementById('videoThumb');
+  const title = (data.title || '').trim();
+  if (!title && !data.thumbnail) {
+    box.style.display = 'none';
+    return;
+  }
+
+  document.getElementById('videoTitle').textContent = title || '（無標題）';
+  document.getElementById('videoUploader').textContent =
+    data.uploader ? `UP主：${data.uploader}` : '';
+  document.getElementById('videoDuration').textContent =
+    data.duration_formatted ? `時長：${data.duration_formatted}` : '';
+
+  if (data.thumbnail) {
+    thumb.src = data.thumbnail;
+    thumb.alt = title || '影片縮圖';
+    thumb.style.display = '';
+  } else {
+    thumb.removeAttribute('src');
+    thumb.style.display = 'none';
+  }
+
+  box.style.display = 'block';
 }
 
 function renderFormats(formats) {

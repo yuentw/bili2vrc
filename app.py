@@ -2,6 +2,7 @@
 app.py  ─  B站→R2→VRChat 上傳工具後端
 """
 import json
+import logging
 import os
 import queue
 import re
@@ -19,9 +20,24 @@ import config
 import hwaccel
 
 app = Flask(__name__)
+logger = logging.getLogger("bili2vrchat")
 
 PLAYBACK_SPEED_MIN = 0.5
 PLAYBACK_SPEED_MAX = 2.0
+
+
+def setup_logging() -> None:
+    if logging.getLogger().handlers:
+        return
+    level = getattr(logging, config.LOG_LEVEL.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
+setup_logging()
 
 # ──────────────────────────────────────────────
 # 工具函式
@@ -58,6 +74,30 @@ def format_size(size_bytes) -> str:
     if size_bytes >= 1024:
         return f"{size_bytes / 1024:.0f} KB"
     return f"{size_bytes} B"
+
+
+def format_duration(seconds) -> str:
+    """把秒數轉成 MM:SS 或 HH:MM:SS"""
+    if not seconds:
+        return "-"
+    total = int(seconds)
+    hours, rem = divmod(total, 3600)
+    mins, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}:{mins:02d}:{secs:02d}"
+    return f"{mins}:{secs:02d}"
+
+
+def pick_thumbnail(info: dict) -> str:
+    """從 yt-dlp 輸出挑最高解析度縮圖"""
+    thumbnails = info.get("thumbnails") or []
+    if thumbnails:
+        best = max(
+            thumbnails,
+            key=lambda item: (item.get("width") or 0) * (item.get("height") or 0),
+        )
+        return best.get("url") or best.get("id") or ""
+    return info.get("thumbnail") or ""
 
 
 def get_cookie_args():
@@ -209,6 +249,12 @@ def transcode_h264(
         "-y", dst,
     ]
 
+    logger.info(
+        "transcode start: encoder=%s speed=%sx src=%s dst=%s",
+        encoder.name, speed, os.path.basename(src), os.path.basename(dst),
+    )
+    logger.debug("ffmpeg command: %s", " ".join(cmd))
+
     try:
         proc = subprocess.Popen(
             cmd,
@@ -224,8 +270,14 @@ def transcode_h264(
             if m:
                 emit_fn(step, f"{emit_msg}  已處理 {m.group(1)}")
         proc.wait()
-        return proc.returncode == 0 and os.path.isfile(dst)
-    except Exception:
+        ok = proc.returncode == 0 and os.path.isfile(dst)
+        if ok:
+            logger.info("transcode done: %s", os.path.basename(dst))
+        else:
+            logger.error("transcode failed (exit %s): %s", proc.returncode, os.path.basename(src))
+        return ok
+    except Exception as exc:
+        logger.exception("transcode error: %s", exc)
         return False
 
 
@@ -246,6 +298,8 @@ def fetch_formats():
     if not url:
         return jsonify({"error": "請輸入影片網址"}), 400
 
+    logger.info("fetch-formats: url=%s cookie=%s", url, os.path.isfile(config.COOKIE_PATH))
+
     cookie_args = get_cookie_args()
 
     cmd = [
@@ -264,14 +318,17 @@ def fetch_formats():
             timeout=60,
         )
     except FileNotFoundError:
+        logger.error("fetch-formats: yt-dlp not found")
         return jsonify({"error": "找不到 yt-dlp，請先安裝並加入 PATH"}), 500
     except subprocess.TimeoutExpired:
+        logger.error("fetch-formats: timeout url=%s", url)
         return jsonify({"error": "取得格式逾時（60 秒）"}), 500
 
     if result.returncode != 0:
         err = result.stderr.strip().splitlines()
         # 取最後幾行當錯誤訊息
         msg = "\n".join(err[-5:]) if err else "yt-dlp 執行失敗"
+        logger.warning("fetch-formats failed: %s", msg)
         return jsonify({"error": msg}), 400
 
     try:
@@ -282,7 +339,8 @@ def fetch_formats():
     raw_formats = info.get("formats", [])
     title = info.get("title", "")
     duration = info.get("duration")
-    thumbnail = info.get("thumbnail", "")
+    thumbnail = pick_thumbnail(info)
+    uploader = info.get("uploader") or info.get("channel") or ""
 
     # 只保留有影像的格式
     video_formats = []
@@ -315,10 +373,17 @@ def fetch_formats():
     # 排序：解析度高→低，同解析度按大小高→低
     video_formats.sort(key=lambda x: (x["height"], x["size_bytes"]), reverse=True)
 
+    logger.info(
+        "fetch-formats ok: title=%r formats=%d duration=%s",
+        title, len(video_formats), duration,
+    )
+
     return jsonify({
         "title":    title,
         "duration": duration,
+        "duration_formatted": format_duration(duration),
         "thumbnail": thumbnail,
+        "uploader": uploader,
         "formats":  video_formats,
         "cookie_ok": os.path.isfile(config.COOKIE_PATH),
     })
@@ -335,15 +400,22 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
     output_path = None
 
     def emit(step: str, message: str, **extra):
+        logger.info("[%s] %s", step, message)
         q.put({"type": "status", "step": step, "message": message, **extra})
 
     def emit_error(msg: str):
+        logger.error("%s", msg)
         q.put({"type": "error", "message": msg})
 
     def emit_result(url_str: str):
+        logger.info("result url=%s", url_str)
         q.put({"type": "result", "url": url_str})
 
     try:
+        logger.info(
+            "process start: url=%s format_id=%s ttl=%s compat=%s speed=%sx",
+            url, format_id, ttl, compat_mode, clamp_playback_speed(playback_speed),
+        )
         # ── Step 1: 取影片 ID 決定輸出檔名 ──
         emit("info", "取得影片資訊...")
         cookie_args = get_cookie_args()
@@ -358,6 +430,7 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
         video_id = re.sub(r'[\\/:*?"<>|]', "_", video_id)
 
         output_path = os.path.join(config.TEMP_DIR, f"{video_id}.mp4")
+        logger.info("video_id=%s output=%s", video_id, output_path)
 
         # 如果已有暫存檔先刪除
         if os.path.isfile(output_path):
@@ -365,6 +438,7 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
 
         # ── Step 2: yt-dlp 下載 ──
         use_aria2 = has_aria2c()
+        logger.info("download: aria2c=%s format_id=%s", use_aria2, format_id)
         if use_aria2:
             emit("download", "偵測到 aria2c，啟用 16 執行緒加速下載...")
         else:
@@ -437,6 +511,7 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
 
         proc.wait()
         if proc.returncode != 0:
+            logger.error("download failed: exit=%s video_id=%s", proc.returncode, video_id)
             emit_error("yt-dlp 下載失敗，請檢查網址或 cookie")
             return
 
@@ -451,6 +526,8 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
         emit("verify", "驗證影片完整性...")
         v_ok, v_msg = verify_mp4(output_path)
         emit("verify", v_msg)
+        if not v_ok:
+            logger.warning("verify failed: %s", v_msg)
 
         # ── Step 2.5: faststart / 重新編碼 / 時間拉伸 ──
         speed = clamp_playback_speed(playback_speed)
@@ -480,9 +557,11 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
                 emit(done_step, f"處理完成  ({format_size(file_size)})")
             else:
                 fail_msg = "⚠ 處理失敗，使用原始檔案上傳"
+                logger.warning("transcode fallback to original: %s", output_path)
                 emit("reencode" if compat_mode else "stretch", fail_msg)
         else:
             # 僅加 faststart（速度快，不重編碼）
+            logger.info("faststart: %s", os.path.basename(output_path))
             emit("faststart", "準備頁面播放 (faststart)...")
             fs_path = output_path.replace(".mp4", "_fs.mp4")
             if apply_faststart(output_path, fs_path):
@@ -520,12 +599,15 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
             return
 
         if sign_data.get("status") != 200:
-            emit_error(sign_data.get("error", "取得憑證失敗"))
+            err = sign_data.get("error", "取得憑證失敗")
+            logger.error("presign rejected: %s", err)
+            emit_error(err)
             return
 
         upload_url   = sign_data["uploadUrl"]
         r2_key       = sign_data["key"]
         expires_val  = sign_data["expiresValue"]
+        logger.info("presign ok: key=%s size=%s", r2_key, format_size(file_size))
 
         # ── Step 4: PUT 上傳 ──
         emit("upload", "上傳至 Cloudflare R2...")
@@ -580,14 +662,17 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
             reader.close()
 
         if up_resp.status_code not in (200, 201):
+            logger.error("upload rejected: HTTP %s", up_resp.status_code)
             emit_error(f"R2 拒絕上傳 (HTTP {up_resp.status_code})")
             return
 
         final_url = f"{config.WORKER_URL}/{r2_key}"
+        logger.info("process complete: %s", final_url)
         emit("done", "上傳完成！")
         emit_result(final_url)
 
     except Exception as e:
+        logger.exception("process error: %s", e)
         emit_error(f"意外錯誤：{e}")
 
     finally:
@@ -595,8 +680,9 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
         if output_path and os.path.isfile(output_path):
             try:
                 os.remove(output_path)
-            except Exception:
-                pass
+                logger.debug("temp removed: %s", output_path)
+            except Exception as exc:
+                logger.warning("temp cleanup failed: %s (%s)", output_path, exc)
         q.put(None)  # sentinel：結束串流
 
 
@@ -616,6 +702,11 @@ def process():
 
     if not url or not format_id:
         return jsonify({"error": "缺少必要參數"}), 400
+
+    logger.info(
+        "api/process: format_id=%s ttl=%s compat=%s speed=%sx",
+        format_id, ttl, compat_mode, playback_speed,
+    )
 
     q = queue.Queue()
     t = threading.Thread(
@@ -681,7 +772,7 @@ def retro():
 
 if __name__ == "__main__":
     encoder = hwaccel.get_video_encoder()
-    print(f"[bili2vrchat] 啟動於 http://localhost:{config.PORT}")
-    print(f"[bili2vrchat] Cookie 路徑：{config.COOKIE_PATH}")
-    print(f"[bili2vrchat] 影片編碼器：{encoder.label} ({encoder.name})")
+    logger.info("listening on http://%s:%s", config.HOST, config.PORT)
+    logger.info("cookie path: %s (exists=%s)", config.COOKIE_PATH, os.path.isfile(config.COOKIE_PATH))
+    logger.info("video encoder: %s (%s)", encoder.label, encoder.name)
     app.run(host=config.HOST, port=config.PORT, threaded=True, debug=False)
