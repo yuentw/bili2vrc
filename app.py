@@ -309,6 +309,13 @@ def has_aria2c() -> bool:
     return shutil.which("aria2c") is not None
 
 
+def should_use_aria2c(url: str) -> bool:
+    """YouTube 不使用 aria2c（與 yt-dlp 外部下載器相容性較差）"""
+    if detect_platform(url) == "youtube":
+        return False
+    return has_aria2c()
+
+
 def get_aria2c_cmd() -> str:
     """回傳 aria2c 可用的命令名稱（bundled 或 PATH）"""
     bundled = _bundled_aria2c_path()
@@ -659,12 +666,12 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
             os.remove(output_path)
 
         # ── Step 2: yt-dlp 下載 ──
-        use_aria2 = has_aria2c()
-        logger.info("download: aria2c=%s format_id=%s", use_aria2, format_id)
+        use_aria2 = should_use_aria2c(url)
+        logger.info("download: aria2c=%s platform=%s format_id=%s", use_aria2, detect_platform(url), format_id)
         if use_aria2:
             emit("download", "偵測到 aria2c，啟用 16 執行緒加速下載...")
         else:
-            emit("download", "開始下載...（安裝 aria2c 可大幅加速）")
+            emit("download", "開始下載...")
 
         dl_cmd = [
             "yt-dlp",
