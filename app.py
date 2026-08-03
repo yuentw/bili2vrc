@@ -27,6 +27,7 @@ logger = logging.getLogger("bili2vrchat")
 
 PLAYBACK_SPEED_MIN = 0.5
 PLAYBACK_SPEED_MAX = 2.0
+YTDLP_JS_ARGS = ["--js-runtimes", "node"]
 
 
 class ProcessController:
@@ -505,7 +506,7 @@ def fetch_formats():
 
             cmd = [
                 "yt-dlp", "-J", "--no-playlist",
-                "--js-runtimes", "node",
+                *YTDLP_JS_ARGS,
                 *cookie_args,
                 url,
             ]
@@ -637,7 +638,7 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
         emit("info", "取得影片資訊...")
         cookie_args = get_cookie_args(cookie_path)
 
-        id_cmd = ["yt-dlp", "--get-id", "--no-playlist", *cookie_args, url]
+        id_cmd = ["yt-dlp", "--get-id", "--no-playlist", *YTDLP_JS_ARGS, *cookie_args, url]
         id_result = subprocess.run(
             id_cmd, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=30
@@ -669,6 +670,7 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
             "--merge-output-format", "mp4",
             "--no-playlist",
             "--newline",
+            *YTDLP_JS_ARGS,
             # ── 穩定性：重試與修復 ──
             "--retries",          "15",   # 整體重試次數
             "--fragment-retries", "15",   # 單一 DASH 片段重試
