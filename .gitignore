@@ -2,3 +2,5 @@
 __pycache__
 temp/
 .env
+aria2c.exe
+aria2c

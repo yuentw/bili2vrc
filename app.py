@@ -290,8 +290,8 @@ def get_cookie_args(cookie_path: str | None = None):
     return []
 
 
-def _bundled_aria2c_path() -> str | None:
-    """專案目錄內附帶的 aria2c（Windows: aria2c.exe，Unix: aria2c）"""
+def _local_aria2c_path() -> str | None:
+    """專案根目錄內使用者自行放置的 aria2c（Windows: aria2c.exe，Unix: aria2c）"""
     name = "aria2c.exe" if sys.platform == "win32" else "aria2c"
     path = os.path.join(config.BASE_DIR, name)
     if not os.path.isfile(path):
@@ -302,10 +302,10 @@ def _bundled_aria2c_path() -> str | None:
 
 
 def has_aria2c() -> bool:
-    """偵測 aria2c：先查專案目錄 bundled binary，再查 PATH（可由 DISABLE_ARIA2C 關閉）"""
+    """偵測 aria2c：先查專案根目錄，再查 PATH（可由 DISABLE_ARIA2C 關閉）"""
     if config.DISABLE_ARIA2C:
         return False
-    if _bundled_aria2c_path():
+    if _local_aria2c_path():
         return True
     return shutil.which("aria2c") is not None
 
@@ -318,9 +318,9 @@ def should_use_aria2c(url: str) -> bool:
 
 
 def get_aria2c_cmd() -> str:
-    """回傳 aria2c 可用的命令名稱（bundled 或 PATH）"""
-    bundled = _bundled_aria2c_path()
-    return bundled if bundled else "aria2c"
+    """回傳 aria2c 可用的命令名稱（專案根目錄或 PATH）"""
+    local = _local_aria2c_path()
+    return local if local else "aria2c"
 
 
 def verify_mp4(filepath: str):

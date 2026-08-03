@@ -29,7 +29,7 @@ Browser → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
 | [Node.js](https://nodejs.org/) | Yes for YouTube | yt-dlp (`--js-runtimes node`) |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Yes | via `requirements.txt` |
 | Cloudflare R2 bucket | Yes | see [R2 setup](#cloudflare-r2-setup) below |
-| aria2c | Optional | faster Bilibili downloads; **not used for YouTube** |
+| [aria2](https://github.com/aria2/aria2) | Optional | faster Bilibili downloads; **not bundled** — install yourself (see below); **not used for YouTube** |
 
 ---
 
@@ -123,7 +123,7 @@ export R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 ### Windows
 
 1. Install **Python 3**, **ffmpeg** (`ffmpeg -version`), **Node.js** (`node -version`)
-2. Optional: place `aria2c.exe` in the project root for faster Bilibili downloads
+2. Optional: for faster Bilibili downloads, install aria2 yourself — on Windows, download `aria2c.exe` from [aria2 releases](https://github.com/aria2/aria2/releases) and place it in the project root; on Unix, install via package manager (see below). Not bundled with this project.
 3. Configure R2 (see above)
 4. Run:
 
@@ -270,6 +270,6 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | Upload fails (403 / signature) | Rotate API token; verify bucket name and permissions |
 | No HTTP URL after upload | Set `R2_PUBLIC_BASE_URL` and enable bucket public access |
 | YouTube fetch fails | Install Node.js; run `node -version` |
-| Bilibili slow | Add `aria2c` to project root or `PATH` |
+| Bilibili slow | Add `aria2c.exe` to project root (Windows) or install aria2 to `PATH` |
 | Expired files still in bucket | App must be running for cleanup; or wait until next scan interval |
 | VRChat won’t play / can’t seek | Enable **VRChat compat mode**; ensure `R2_PUBLIC_BASE_URL` is set |

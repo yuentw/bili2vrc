@@ -29,7 +29,7 @@
 | [Node.js](https://nodejs.org/) | YouTube 必需 | 供 yt-dlp 使用 |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 是 | 透過 `requirements.txt` 安裝 |
 | Cloudflare R2 儲存桶 | 是 | 見下方 [R2 設定教學](#cloudflare-r2-設定教學) |
-| aria2c | 可選 | 加速 Bilibili 下載；**不用於 YouTube** |
+| [aria2](https://github.com/aria2/aria2) | 可選 | 加速 Bilibili 下載；**本專案不附帶**，需自行安裝（見下方）；**不用於 YouTube** |
 
 ---
 
@@ -123,7 +123,7 @@ export R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 ### Windows
 
 1. 安裝 **Python 3**、**ffmpeg**（`ffmpeg -version`）、**Node.js**（`node -version`）
-2. 可選：將 `aria2c.exe` 放在專案根目錄以加速 Bilibili
+2. 可選：若要加速 Bilibili，請自行安裝 aria2 — Windows 可從 [aria2 releases](https://github.com/aria2/aria2/releases) 下載 `aria2c.exe` 放在專案根目錄；Unix 請用套件管理器安裝（見下方）。本專案不附帶 aria2。
 3. 完成上方 R2 設定
 4. 執行：
 
@@ -270,6 +270,6 @@ docker run --rm -p 5000:5000 \
 | 上傳失敗（403／簽章錯誤） | 重建 API Token；確認 bucket 名稱與權限 |
 | 完成後沒有 HTTP 網址 | 設定 `R2_PUBLIC_BASE_URL` 並開啟 bucket 公開存取 |
 | YouTube 獲取格式失敗 | 安裝 Node.js，確認 `node -version` |
-| Bilibili 很慢 | 加入 `aria2c.exe` 或安裝 aria2 |
+| Bilibili 很慢 | Windows：將 `aria2c.exe` 放在專案根目錄；或安裝 aria2 至 `PATH` |
 | 過期檔案仍在 bucket | 程式需持續運行才會清理；或等下一個掃描週期 |
 | VRChat 無法播放／不能 seek | 開啟 **VRChat 相容模式**；確認已設 `R2_PUBLIC_BASE_URL` |
