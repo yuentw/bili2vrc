@@ -17,7 +17,7 @@ const hideCookieWarning = ref(false)
 
 onMounted(() => {
   app.loadHwaccelStatus()
-  app.updateCookieWarningForUrl(app.urlInput.value)
+  app.updateCookieWarningForUrl(String(app.urlInput ?? ''))
 })
 
 function onCookieFileChange(event: Event) {
@@ -135,11 +135,18 @@ function copyRetroUrl() {
             <div class="cookie-panel-body">
               <input
                 ref="cookieFileInput"
+                class="file-input-hidden"
                 type="file"
                 accept=".txt,text/plain"
                 @change="onCookieFileChange"
               >
-              <button class="xp-btn" type="button" @click="cookieFileInput?.click()">儲存</button>
+              <button
+                class="xp-btn cookie-file-picker"
+                type="button"
+                @click="cookieFileInput?.click()"
+              >
+                選擇 cookies.txt 檔案
+              </button>
               <div id="cookiePlatforms">
                 <div
                   v-for="platform in app.COOKIE_PLATFORMS"

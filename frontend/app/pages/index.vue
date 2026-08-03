@@ -19,7 +19,7 @@ const previewVideo = ref<HTMLVideoElement | null>(null)
 
 onMounted(() => {
   app.loadHwaccelStatus()
-  app.updateCookieWarningForUrl(app.urlInput.value)
+  app.updateCookieWarningForUrl(String(app.urlInput ?? ''))
 })
 
 function onCookieFileChange(event: Event) {
@@ -50,7 +50,7 @@ function onResultVideoLoad() {
     <header>
       <h1>🎬 bili2vrchat</h1>
       <span class="badge">B站 / YouTube → R2 → VRChat</span>
-      <NuxtLink to="/retro" class="badge theme-link">Windows XP 版</NuxtLink>
+      <!-- <NuxtLink to="/retro" class="badge theme-link" disabled>Windows XP 版</NuxtLink> -->
     </header>
 
     <main>
@@ -85,12 +85,17 @@ function onResultVideoLoad() {
           <div class="cookie-row">
             <input
               ref="cookieFileInput"
+              class="file-input-hidden"
               type="file"
               accept=".txt,text/plain"
               @change="onCookieFileChange"
             >
-            <button class="btn btn-ghost" type="button" @click="cookieFileInput?.click()">
-              儲存到瀏覽器
+            <button
+              class="btn btn-ghost cookie-file-picker"
+              type="button"
+              @click="cookieFileInput?.click()"
+            >
+              選擇 cookies.txt 檔案
             </button>
             <div class="cookie-platforms">
               <div

@@ -71,9 +71,10 @@ export function useBili2Vrc() {
     return status.bilibili || status.youtube ? 'Cookie: 已設定 ✓' : 'Cookie: 未設定 ✗'
   })
 
-  function onUrlInput(value: string) {
-    urlInput.value = value
-    cookieStore.updateCookieWarningForUrl(value)
+  function onUrlInput(value: string | undefined) {
+    const normalized = value ?? ''
+    urlInput.value = normalized
+    cookieStore.updateCookieWarningForUrl(normalized)
   }
 
   async function loadHwaccelStatus() {
