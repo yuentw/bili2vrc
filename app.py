@@ -21,6 +21,7 @@ from flask import Flask, Response, jsonify, render_template, request
 
 import config
 import hwaccel
+import r2
 
 app = Flask(__name__)
 logger = logging.getLogger("bili2vrchat")
@@ -824,109 +825,57 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
         if abort_if_cancelled():
             return
 
-        # ── Step 3: 向 Worker 取 presigned URL ──
-        emit("presign", "向 Cloudflare R2 取得上傳憑證...")
+        # ── Step 3: 直接上傳至 R2 ──
+        emit("presign", "準備 R2 上傳...")
 
         safe_key = key_phrase.strip() if key_phrase else ""
         filename_encoded = urllib.parse.quote(os.path.basename(output_path))
 
-        presign_payload = {
-            "cmd": "admin_get_presigned",
-            "password": config.ADMIN_PASS,
-            "filename": filename_encoded,
-            "filetype": "video/mp4",
-            "keyPhrase": safe_key,
-            "ttl": str(ttl),
-        }
-
         try:
-            sign_resp = requests.post(
-                config.WORKER_URL,
-                json=presign_payload,
-                timeout=30,
-            )
-            sign_data = sign_resp.json()
-        except Exception as e:
-            emit_error(f"取得憑證失敗：{e}")
+            r2_key, key_err = r2.resolve_object_key(safe_key)
+            if key_err:
+                emit_error(key_err)
+                return
+            expires_val = r2.expires_value_for_ttl(ttl)
+        except RuntimeError as exc:
+            emit_error(str(exc))
+            return
+        except Exception as exc:
+            logger.exception("r2 prepare failed")
+            emit_error(f"R2 設定錯誤：{exc}")
             return
 
-        if sign_data.get("status") != 200:
-            err = sign_data.get("error", "取得憑證失敗")
-            logger.error("presign rejected: %s", err)
-            emit_error(err)
-            return
+        logger.info("r2 upload prepare: key=%s size=%s", r2_key, format_size(file_size))
 
-        upload_url   = sign_data["uploadUrl"]
-        r2_key       = sign_data["key"]
-        expires_val  = sign_data["expiresValue"]
-        logger.info("presign ok: key=%s size=%s", r2_key, format_size(file_size))
-
-        # ── Step 4: PUT 上傳 ──
         emit("upload", "上傳至 Cloudflare R2...")
 
-        class ProgressReader:
-            """
-            File-like wrapper 連 __len__ 一起定義，
-            讓 requests/urllib3 使用 Content-Length 而不是 chunked transfer。
-            R2 presigned URL 不接受 chunked，就是 10054 的原因。
-            """
-            def __init__(self, path, total, q_ref, cancel_ev):
-                self._f = open(path, "rb")
-                self._total = total
-                self._uploaded = 0
-                self._q = q_ref
-                self._last_pct = -1
-                self._cancel_ev = cancel_ev
+        def on_upload_progress(uploaded: int, total: int) -> None:
+            pct = int(uploaded / total * 100) if total > 0 else 0
+            emit(
+                "upload",
+                f"上傳至 R2  {pct}%  ({format_size(uploaded)} / {format_size(total)})",
+            )
 
-            def read(self, size=-1):
-                if self._cancel_ev and self._cancel_ev.is_set():
-                    raise InterruptedError("cancelled")
-                chunk = self._f.read(size) if (size and size > 0) else self._f.read()
-                self._uploaded += len(chunk)
-                if self._total > 0:
-                    pct = int(self._uploaded / self._total * 100)
-                    if pct != self._last_pct:
-                        self._last_pct = pct
-                        emit("upload",
-                             f"上傳至 R2  {pct}%  "
-                             f"({format_size(self._uploaded)} / {format_size(self._total)})")
-                return chunk
-
-            def __len__(self):
-                return self._total
-
-            def close(self):
-                self._f.close()
-
-        reader = ProgressReader(output_path, file_size, q, cancel_event)
         try:
-            up_resp = requests.put(
-                upload_url,
-                data=reader,
-                headers={
-                    "Content-Type": "video/mp4",
-                    "x-amz-meta-filename": filename_encoded,
-                    "x-amz-meta-expires": expires_val,
-                },
-                timeout=3600,
+            r2.upload_file(
+                output_path,
+                r2_key,
+                filename_encoded,
+                expires_val,
+                on_progress=on_upload_progress,
+                cancel_event=cancel_event,
             )
         except InterruptedError:
             emit_error("已取消")
             return
-        except Exception as e:
-            emit_error(f"上傳失敗：{e}")
-            return
-        finally:
-            reader.close()
-
-        if up_resp.status_code not in (200, 201):
-            logger.error("upload rejected: HTTP %s", up_resp.status_code)
-            emit_error(f"R2 拒絕上傳 (HTTP {up_resp.status_code})")
+        except Exception as exc:
+            logger.exception("r2 upload failed")
+            emit_error(f"上傳失敗：{exc}")
             return
 
-        final_url = f"{config.WORKER_URL}/{r2_key}"
+        final_url = r2.build_object_url(r2_key)
         logger.info("process complete: %s", final_url)
-        emit("done", "上傳完成！")
+        emit("done", f"上傳完成！{r2.ttl_notice(ttl)}")
         emit_result(final_url)
 
     except Exception as e:
@@ -1055,6 +1004,53 @@ def retro():
 
 
 # ──────────────────────────────────────────────
+# R2 過期檔案清理（背景執行）
+# ──────────────────────────────────────────────
+
+def _r2_credentials_configured() -> bool:
+    return all(
+        config.is_set(value)
+        for value in (
+            config.CF_ACCOUNT_ID,
+            config.R2_ACCESS_KEY_ID,
+            config.R2_SECRET_ACCESS_KEY,
+            config.R2_BUCKET_NAME,
+        )
+    )
+
+
+def _run_r2_cleanup() -> None:
+    if not _r2_credentials_configured():
+        return
+    scanned, deleted = r2.purge_expired_objects()
+    if deleted:
+        logger.info("r2 cleanup: scanned=%s deleted=%s", scanned, deleted)
+    else:
+        logger.debug("r2 cleanup: scanned=%s deleted=0", scanned)
+
+
+def start_r2_cleanup_thread() -> None:
+    if not config.R2_CLEANUP_ENABLED:
+        logger.info("r2 cleanup disabled")
+        return
+    if not _r2_credentials_configured():
+        logger.warning("r2 cleanup skipped: R2 credentials not configured")
+        return
+
+    def cleanup_loop() -> None:
+        while True:
+            try:
+                _run_r2_cleanup()
+            except Exception:
+                logger.exception("r2 cleanup failed")
+            time.sleep(config.R2_CLEANUP_INTERVAL)
+
+    thread = threading.Thread(target=cleanup_loop, name="r2-cleanup", daemon=True)
+    thread.start()
+    logger.info("r2 cleanup thread started (interval=%ss)", config.R2_CLEANUP_INTERVAL)
+
+
+# ──────────────────────────────────────────────
 # 入口
 # ──────────────────────────────────────────────
 
@@ -1062,4 +1058,5 @@ if __name__ == "__main__":
     encoder = hwaccel.get_video_encoder()
     logger.info("listening on http://%s:%s", config.HOST, config.PORT)
     logger.info("video encoder: %s (%s)", encoder.label, encoder.name)
+    start_r2_cleanup_thread()
     app.run(host=config.HOST, port=config.PORT, threaded=True, debug=False)
