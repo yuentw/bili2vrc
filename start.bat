@@ -1,55 +1,72 @@
 @echo off
 setlocal EnableExtensions
-chcp 65001 >nul
 cd /d "%~dp0"
 
-echo [bili2vrchat] 啟動中...
+echo [bili2vrchat] Starting...
 
-:: ── bun：優先 PATH，其次專案 .bun；皆無則安裝到 .bun ──
+rem bun: prefer PATH, then project .bun; install into .bun if missing
 set "BUN_CMD="
-where bun >nul 2>&1 && set "BUN_CMD=bun"
+where bun >nul 2>&1
+if not errorlevel 1 set "BUN_CMD=bun"
 if not defined BUN_CMD if exist "%~dp0.bun\bin\bun.exe" set "BUN_CMD=%~dp0.bun\bin\bun.exe"
 
-if not defined BUN_CMD (
-  echo [bili2vrchat] 未偵測到 bun，安裝至 .bun ...
-  set "BUN_INSTALL=%~dp0.bun"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://bun.sh/install.ps1 | iex"
-  if errorlevel 1 (
-    echo [bili2vrchat] bun 安裝失敗
-    pause
-    exit /b 1
-  )
-  if not exist "%~dp0.bun\bin\bun.exe" (
-    echo [bili2vrchat] bun 安裝後找不到 .bun\bin\bun.exe
-    pause
-    exit /b 1
-  )
-  set "BUN_CMD=%~dp0.bun\bin\bun.exe"
-)
+if defined BUN_CMD goto :have_bun
 
+echo [bili2vrchat] bun not found; installing into .bun ...
+set "BUN_INSTALL=%~dp0.bun"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://bun.sh/install.ps1 | iex"
+if errorlevel 1 goto :fail_bun_install
+if not exist "%~dp0.bun\bin\bun.exe" goto :fail_bun_missing
+set "BUN_CMD=%~dp0.bun\bin\bun.exe"
+
+:have_bun
 set "PATH=%~dp0.bun\bin;%PATH%"
 
-:: ── frontend：bun install + generate ──
-echo [bili2vrchat] 建置 frontend ...
-pushd frontend
-"%BUN_CMD%" install
-if errorlevel 1 (
-  echo [bili2vrchat] bun install 失敗
-  popd
-  pause
-  exit /b 1
-)
-"%BUN_CMD%" run generate
-if errorlevel 1 (
-  echo [bili2vrchat] bun run generate 失敗
-  popd
-  pause
-  exit /b 1
-)
+echo [bili2vrchat] Building frontend ...
+pushd "%~dp0frontend" || goto :fail_frontend_dir
+call "%BUN_CMD%" install
+if errorlevel 1 goto :fail_bun_install_deps
+call "%BUN_CMD%" run generate
+if errorlevel 1 goto :fail_bun_generate
 popd
 
-:: ── Python 依賴與啟動 ──
+echo [bili2vrchat] Installing Python deps ...
 python -m pip install -r requirements.txt -q
-python app.py
+if errorlevel 1 goto :fail_pip
 
+echo [bili2vrchat] Starting server ...
+python app.py
+echo.
 pause
+exit /b 0
+
+:fail_bun_install
+echo [bili2vrchat] bun install failed.
+goto :end_error
+
+:fail_bun_missing
+echo [bili2vrchat] bun.exe not found after install: .bun\bin\bun.exe
+goto :end_error
+
+:fail_frontend_dir
+echo [bili2vrchat] frontend folder not found.
+goto :end_error
+
+:fail_bun_install_deps
+popd
+echo [bili2vrchat] bun install (frontend deps) failed.
+goto :end_error
+
+:fail_bun_generate
+popd
+echo [bili2vrchat] bun run generate failed.
+goto :end_error
+
+:fail_pip
+echo [bili2vrchat] pip install failed. Is Python on PATH?
+goto :end_error
+
+:end_error
+echo.
+pause
+exit /b 1
