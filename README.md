@@ -2,6 +2,8 @@
 
 > neko 🐱
 
+**English** | [繁體中文](README_zh-TW.md)
+
 Web UI to download Bilibili / YouTube videos, optionally transcode for VRChat, and upload to Cloudflare R2 via a Worker presign endpoint.
 
 ```
