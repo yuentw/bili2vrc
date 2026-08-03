@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>bili2vrchat — B站上傳工具</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #1a1d23;
+      --surface:  #22262e;
+      --surface2: #2a2f3a;
+      --border:   #333844;
+      --accent:   #4e8ef7;
+      --accent-h: #6ba3ff;
+      --success:  #3ecf6e;
+      --warn:     #f0a020;
+      --danger:   #e05252;
+      --text:     #dde1ea;
+      --muted:    #7a8192;
+      --row-sel:  rgba(78,142,247,0.18);
+      --row-h:    rgba(255,255,255,0.04);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.02em;
+    }
+    header .badge {
+      font-size: 10px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Main Layout ── */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      max-width: 900px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* ── Section cards ── */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 8px 12px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-body {
+      padding: 12px;
+    }
+
+    /* ── URL Row ── */
+    .url-row {
+      display: flex;
+      gap: 8px;
+    }
+    .url-row input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .url-row input:focus { border-color: var(--accent); }
+    .url-row input::placeholder { color: var(--muted); }
+
+    /* ── Buttons ── */
+    .btn {
+      border: none;
+      border-radius: 4px;
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .12s, opacity .12s;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+    .btn-ghost    { background: var(--surface2); color: var(--text); }
+    .btn-ghost:hover:not(:disabled) { background: var(--border); }
+    .btn-success  { background: var(--success); color: #000; }
+    .btn-success:hover:not(:disabled) { opacity: .85; }
+
+    /* ── Cookie warning ── */
+    #cookieWarning {
+      display: none;
+      font-size: 12px;
+      color: var(--warn);
+      padding: 6px 0 0;
+    }
+
+    /* ── Format table ── */
+    .table-wrap {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    thead th {
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 7px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      user-select: none;
+    }
+    thead th.right { text-align: right; }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      cursor: pointer;
+    }
+    tbody tr:hover   { background: var(--row-h); }
+    tbody tr.selected { background: var(--row-sel); }
+    tbody tr.selected td { color: #fff; }
+
+    tbody td {
+      padding: 6px 10px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    tbody td.right { text-align: right; }
+
+    .badge-codec {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0.04em;
+    }
+    .codec-h264  { background: rgba(78,142,247,.25); color: #7eb4ff; }
+    .codec-h265  { background: rgba(62,207,110,.2);  color: #5de08a; }
+    .codec-av1   { background: rgba(240,160,32,.2);  color: #f0b030; }
+    .codec-vp9   { background: rgba(180,100,240,.2); color: #c07ef0; }
+    .codec-other { background: var(--surface2);      color: var(--muted); }
+
+    .range-hdr { color: var(--warn); font-weight: 600; }
+
+    .empty-hint {
+      text-align: center;
+      color: var(--muted);
+      padding: 28px;
+      font-size: 12px;
+    }
+
+    /* ── Options row ── */
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .field label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .field input,
+    .field select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 6px 9px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus,
+    .field select:focus { border-color: var(--accent); }
+    .field input::placeholder { color: var(--muted); }
+    .field select option { background: var(--surface2); }
+
+    /* ── Action bar ── */
+    .action-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #selInfo {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #selInfo span { color: var(--text); font-weight: 600; }
+
+    /* ── Status ── */
+    #statusBox {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .step-dot.done    { background: var(--success); }
+    .step-dot.error   { background: var(--danger); }
+    .step-dot.spin {
+      background: transparent;
+      border: 2px solid var(--accent);
+      border-top-color: transparent;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #statusMsg {
+      font-size: 13px;
+      color: var(--text);
+      flex: 1;
+    }
+
+    /* ── Result ── */
+    #resultBox {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--success);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+    }
+    #resultBox .result-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--success);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .result-link-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #resultUrl {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: #fff;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-family: monospace;
+      word-break: break-all;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: text;
+      user-select: all;
+    }
+    .vrchat-hint {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    #previewVideo {
+      width: 100%;
+      max-height: 320px;
+      margin-top: 10px;
+      background: #000;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+    .preview-speed {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .preview-speed input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+    #hwEncoderLabel {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎬 bili2vrchat</h1>
+  <span class="badge">B站 → R2 → VRChat</span>
+</header>
+
+<main>
+
+  <!-- URL 輸入 -->
+  <div class="section">
+    <div class="section-title">影片網址</div>
+    <div class="section-body">
+      <div class="url-row">
+        <input type="text" id="urlInput" placeholder="貼入 B 站影片網址，如 https://www.bilibili.com/video/BV..." autocomplete="off" spellcheck="false">
+        <button class="btn btn-primary" id="fetchBtn" onclick="fetchFormats()">獲取格式</button>
+      </div>
+      <div id="cookieWarning">⚠ 未找到 cookies/bilibili.txt，若影片需要登入將無法下載</div>
+    </div>
+  </div>
+
+  <!-- 格式列表 -->
+  <div class="section">
+    <div class="section-title">格式列表  <span id="fmtCount" style="color:var(--text);font-weight:400;font-size:11px"></span></div>
+    <div class="table-wrap">
+      <table id="fmtTable">
+        <thead>
+          <tr>
+            <th style="width:130px">解析度</th>
+            <th style="width:60px">範圍</th>
+            <th style="width:80px">FPS</th>
+            <th style="width:100px">編碼</th>
+            <th class="right" style="width:90px">大小</th>
+          </tr>
+        </thead>
+        <tbody id="fmtBody">
+          <tr><td colspan="5" class="empty-hint">請先輸入網址並點擊「獲取格式」</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 選項 -->
+  <div class="section">
+    <div class="section-title">上傳選項</div>
+    <div class="section-body">
+      <div class="options-grid">
+        <div class="field">
+          <label>自訂路徑名稱（留空自動隨機）</label>
+          <input type="text" id="keyPhrase" placeholder="例如: myvideo" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>保存時間</label>
+          <select id="ttlSelect">
+            <option value="3600">1 小時</option>
+            <option value="86400">1 天</option>
+            <option value="604800" selected>7 天</option>
+            <option value="2592000">30 天</option>
+            <option value="0">永久保存</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>播放速度（上傳前永久變更）</label>
+          <select id="playbackSpeed">
+            <option value="0.5">0.5x（慢速）</option>
+            <option value="0.75">0.75x</option>
+            <option value="1" selected>1.0x（原速）</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="1.75">1.75x</option>
+            <option value="2">2.0x（快速）</option>
+          </select>
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0">
+            <input type="checkbox" id="compatMode" style="width:14px;height:14px;accent-color:var(--accent)">
+            <span style="font-size:13px;color:var(--text)">VRChat 相容模式 — 重新編碼為 H.264（修復固定時間點撕裂，較慢）</span>
+          </label>
+          <div id="hwEncoderLabel">編碼器：偵測中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 執行按鈕 -->
+  <div class="section">
+    <div class="section-body">
+      <div class="action-bar">
+        <button class="btn btn-primary" id="processBtn" onclick="startProcess()" disabled>下載並上傳</button>
+        <div id="selInfo">尚未選擇格式</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 狀態 -->
+  <div id="statusBox">
+    <div class="status-row">
+      <div class="step-dot spin" id="stepDot"></div>
+      <div id="statusMsg">等待中...</div>
+    </div>
+  </div>
+
+  <!-- 結果 -->
+  <div id="resultBox">
+    <div class="result-label">✓ 上傳完成 — VRChat 直連</div>
+    <div class="result-link-row">
+      <div id="resultUrl"></div>
+      <button class="btn btn-ghost" id="copyBtn" onclick="copyUrl()">複製</button>
+    </div>
+    <video id="previewVideo" controls playsinline></video>
+    <div class="preview-speed">
+      <label for="previewSpeed">預覽速度</label>
+      <input type="range" id="previewSpeed" min="0.5" max="2" step="0.05" value="1">
+      <span id="previewSpeedLabel">1.0x</span>
+    </div>
+    <div class="vrchat-hint">💡 在 VRChat 影片播放器中貼上此連結即可播放</div>
+  </div>
+
+</main>
+
+<script>
+// ── 狀態 ──
+let selectedFormat = null;
+let resultUrl = '';
+
+// ── 啟動時檢查 cookie ──
+fetch('/api/cookie-status').then(r => r.json()).then(d => {
+  document.getElementById('cookieWarning').style.display = d.exists ? 'none' : 'block';
+});
+
+fetch('/api/hwaccel-status').then(r => r.json()).then(d => {
+  const suffix = d.fallback ? ' (軟體)' : '';
+  document.getElementById('hwEncoderLabel').textContent = `編碼器：${d.label}${suffix}`;
+}).catch(() => {
+  document.getElementById('hwEncoderLabel').textContent = '編碼器：未知';
+});
+
+const previewVideo = document.getElementById('previewVideo');
+const previewSpeedInput = document.getElementById('previewSpeed');
+const previewSpeedLabel = document.getElementById('previewSpeedLabel');
+
+previewVideo.preservesPitch = true;
+previewSpeedInput.addEventListener('input', () => {
+  const speed = parseFloat(previewSpeedInput.value);
+  previewVideo.playbackRate = speed;
+  previewSpeedLabel.textContent = `${speed.toFixed(2)}x`;
+});
+
+// ── 取得格式 ──
+async function fetchFormats() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+
+  const btn = document.getElementById('fetchBtn');
+  btn.disabled = true;
+  btn.textContent = '載入中...';
+  document.getElementById('fmtCount').textContent = '';
+
+  selectedFormat = null;
+  document.getElementById('processBtn').disabled = true;
+  document.getElementById('selInfo').textContent = '尚未選擇格式';
+
+  setBody('<tr><td colspan="5" class="empty-hint">取得格式中，請稍候...</td></tr>');
+
+  try {
+    const res = await fetch('/api/fetch-formats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      setBody(`<tr><td colspan="5" class="empty-hint" style="color:var(--danger)">${esc(data.error)}</td></tr>`);
+      return;
+    }
+
+    renderFormats(data.formats || [], data.title);
+    document.getElementById('cookieWarning').style.display = data.cookie_ok ? 'none' : 'block';
+
+  } catch (e) {
+    setBody(`<tr><td colspan="5" class="empty-hint" style="color:var(--danger)">網路錯誤：${esc(e.message)}</td></tr>`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '獲取格式';
+  }
+}
+
+function renderFormats(formats, title) {
+  if (!formats.length) {
+    setBody('<tr><td colspan="5" class="empty-hint">未找到可用格式</td></tr>');
+    return;
+  }
+  document.getElementById('fmtCount').textContent = `${formats.length} 個`;
+
+  const rows = formats.map((f, i) => {
+    const codecClass = getCodecClass(f.codec);
+    const fps = f.fps ? f.fps.toFixed(3) + 'fps' : '-';
+    const range = f.dynamic_range === 'HDR' || f.dynamic_range === 'HDR10' || f.dynamic_range === 'HLG'
+      ? `<span class="range-hdr">${esc(f.dynamic_range)}</span>`
+      : esc(f.dynamic_range || 'SDR');
+    const size = f.size_approx ? '~' + f.size : f.size;
+    return `<tr data-idx="${i}" onclick="selectRow(this,${i})">
+      <td><strong>${esc(f.resolution)}</strong></td>
+      <td>${range}</td>
+      <td>${fps}</td>
+      <td><span class="badge-codec ${codecClass}">${esc(f.codec)}</span></td>
+      <td class="right">${esc(size)}</td>
+    </tr>`;
+  }).join('');
+
+  setBody(rows);
+  window._formats = formats;
+
+  // 自動選第一行
+  const firstRow = document.querySelector('#fmtBody tr[data-idx="0"]');
+  if (firstRow) selectRow(firstRow, 0);
+}
+
+function selectRow(tr, idx) {
+  document.querySelectorAll('#fmtBody tr').forEach(r => r.classList.remove('selected'));
+  tr.classList.add('selected');
+  selectedFormat = window._formats[idx];
+  document.getElementById('processBtn').disabled = false;
+
+  const f = selectedFormat;
+  const fps = f.fps ? f.fps.toFixed(3) + ' fps' : '';
+  document.getElementById('selInfo').innerHTML =
+    `已選擇 <span>${esc(f.resolution)}</span>  ${esc(f.codec)}  ${fps}`;
+}
+
+function getCodecClass(codec) {
+  if (!codec) return 'codec-other';
+  const c = codec.toLowerCase();
+  if (c.includes('h.264') || c.includes('264')) return 'codec-h264';
+  if (c.includes('h.265') || c.includes('265') || c.includes('hevc')) return 'codec-h265';
+  if (c.includes('av1')) return 'codec-av1';
+  if (c.includes('vp9')) return 'codec-vp9';
+  return 'codec-other';
+}
+
+// ── 開始處理 ──
+async function startProcess() {
+  if (!selectedFormat) return;
+
+  const url        = document.getElementById('urlInput').value.trim();
+  const keyPhrase  = document.getElementById('keyPhrase').value.trim();
+  const ttl        = parseInt(document.getElementById('ttlSelect').value) || 0;
+  const compatMode = document.getElementById('compatMode').checked;
+  const playbackSpeed = parseFloat(document.getElementById('playbackSpeed').value) || 1;
+
+  // 重置結果
+  document.getElementById('resultBox').style.display  = 'none';
+  document.getElementById('statusBox').style.display  = 'block';
+  setStatus('spin', '準備下載...');
+
+  document.getElementById('processBtn').disabled = true;
+  document.getElementById('fetchBtn').disabled   = true;
+
+  try {
+    const response = await fetch('/api/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url,
+        format_id: selectedFormat.format_id,
+        key_phrase: keyPhrase,
+        ttl,
+        compat_mode: compatMode,
+        playback_speed: playbackSpeed,
+      }),
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      // SSE 可能多行
+      const lines = buf.split('\n');
+      buf = lines.pop(); // 未完整行留著
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const evt = JSON.parse(line.slice(6));
+          handleEvent(evt);
+        } catch (_) {}
+      }
+    }
+  } catch (e) {
+    setStatus('error', `連線中斷：${e.message}`);
+  } finally {
+    document.getElementById('processBtn').disabled = false;
+    document.getElementById('fetchBtn').disabled   = false;
+  }
+}
+
+function handleEvent(evt) {
+  if (evt.type === 'status') {
+    const dotClass = evt.step === 'done' ? 'done' : 'spin';
+    setStatus(dotClass, evt.message);
+  } else if (evt.type === 'error') {
+    setStatus('error', '❌ ' + evt.message);
+  } else if (evt.type === 'result') {
+    setStatus('done', '完成');
+    showResult(evt.url);
+  }
+}
+
+function setStatus(dotClass, msg) {
+  const dot = document.getElementById('stepDot');
+  dot.className = 'step-dot ' + dotClass;
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+function showResult(url) {
+  resultUrl = url;
+  document.getElementById('resultUrl').textContent = url;
+  document.getElementById('resultBox').style.display = 'block';
+  document.getElementById('copyBtn').textContent = '複製';
+  previewVideo.src = url;
+  previewSpeedInput.value = '1';
+  previewSpeedLabel.textContent = '1.0x';
+  previewVideo.playbackRate = 1;
+}
+
+function copyUrl() {
+  const btn = document.getElementById('copyBtn');
+  const fallback = () => {
+    // HTTP LAN 環境下 navigator.clipboard 被封鎖，用 execCommand 降級
+    const ta = document.createElement('textarea');
+    ta.value = resultUrl;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch(_) {}
+    document.body.removeChild(ta);
+    btn.textContent = ok ? '✓ 已複製' : '請手動複製↑';
+    setTimeout(() => { btn.textContent = '複製'; }, 2500);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(resultUrl)
+      .then(() => {
+        btn.textContent = '✓ 已複製';
+        setTimeout(() => { btn.textContent = '複製'; }, 2000);
+      })
+      .catch(fallback);
+  } else {
+    fallback();
+  }
+}
+
+// ── 工具 ──
+function setBody(html) {
+  document.getElementById('fmtBody').innerHTML = html;
+}
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Enter 鍵直接獲取格式
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') fetchFormats();
+});
+</script>
+</body>
+</html>

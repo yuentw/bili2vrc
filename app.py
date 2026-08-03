@@ -1,0 +1,687 @@
+"""
+app.py  ─  B站→R2→VRChat 上傳工具後端
+"""
+import json
+import os
+import queue
+import re
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import urllib.parse
+
+import requests
+from flask import Flask, Response, jsonify, render_template, request
+
+import config
+import hwaccel
+
+app = Flask(__name__)
+
+PLAYBACK_SPEED_MIN = 0.5
+PLAYBACK_SPEED_MAX = 2.0
+
+# ──────────────────────────────────────────────
+# 工具函式
+# ──────────────────────────────────────────────
+
+def simplify_codec(vcodec: str) -> str:
+    """把 yt-dlp 原始 codec 字串縮短成好讀格式"""
+    if not vcodec or vcodec == "none":
+        return "-"
+    v = vcodec.lower()
+    if v.startswith("avc") or "h264" in v:
+        return "H.264"
+    if v.startswith("hev") or v.startswith("hvc") or "h265" in v or "hevc" in v:
+        return "H.265"
+    if v.startswith("av01") or v.startswith("av1"):
+        return "AV1"
+    if "vp9" in v:
+        return "VP9"
+    if "vp8" in v:
+        return "VP8"
+    # 原始字串截短，最多 16 字元
+    return vcodec[:16]
+
+
+def format_size(size_bytes) -> str:
+    """把 bytes 轉成易讀字串"""
+    if not size_bytes:
+        return "-"
+    size_bytes = int(size_bytes)
+    if size_bytes >= 1024 ** 3:
+        return f"{size_bytes / 1024 ** 3:.2f} GB"
+    if size_bytes >= 1024 ** 2:
+        return f"{size_bytes / 1024 ** 2:.1f} MB"
+    if size_bytes >= 1024:
+        return f"{size_bytes / 1024:.0f} KB"
+    return f"{size_bytes} B"
+
+
+def get_cookie_args():
+    """如果 cookie 檔案存在就帶參數，否則不帶"""
+    if os.path.isfile(config.COOKIE_PATH):
+        return ["--cookies", config.COOKIE_PATH]
+    return []
+
+
+def _bundled_aria2c_path() -> str | None:
+    """專案目錄內附帶的 aria2c（Windows: aria2c.exe，Unix: aria2c）"""
+    name = "aria2c.exe" if sys.platform == "win32" else "aria2c"
+    path = os.path.join(config.BASE_DIR, name)
+    if not os.path.isfile(path):
+        return None
+    if sys.platform != "win32" and not os.access(path, os.X_OK):
+        return None
+    return path
+
+
+def has_aria2c() -> bool:
+    """偵測 aria2c：先查專案目錄 bundled binary，再查 PATH"""
+    if _bundled_aria2c_path():
+        return True
+    return shutil.which("aria2c") is not None
+
+
+def get_aria2c_cmd() -> str:
+    """回傳 aria2c 可用的命令名稱（bundled 或 PATH）"""
+    bundled = _bundled_aria2c_path()
+    return bundled if bundled else "aria2c"
+
+
+def verify_mp4(filepath: str):
+    """
+    用 ffprobe 驗證 MP4 完整性，回傳 (ok: bool, msg: str)。
+    檢查項目：
+      1. codec 可讀取
+      2. 實際播放時長 > 0（時長為 0 = 檔案被截斷）
+    """
+    try:
+        r = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet",
+                "-print_format", "json",
+                "-show_streams",
+                "-show_format",
+                filepath,
+            ],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            timeout=120,
+        )
+        if r.returncode != 0:
+            return False, "⚠ ffprobe 讀取失敗，可能檔案損毀"
+
+        info = json.loads(r.stdout)
+        streams = info.get("streams", [])
+        fmt    = info.get("format", {})
+
+        if not streams:
+            return False, "⚠ 成變流為空，檔案可能損毀"
+
+        # 檢查播放時長
+        duration = float(fmt.get("duration") or 0)
+        if duration <= 0:
+            return False, "⚠ 時長為 0，檔案可能被截斷（請重試或換格式）"
+
+        mins, secs = divmod(int(duration), 60)
+        hrs,  mins = divmod(mins, 60)
+        dur_str = f"{hrs:02d}:{mins:02d}:{secs:02d}" if hrs else f"{mins:02d}:{secs:02d}"
+        size_mb = os.path.getsize(filepath) / 1024 / 1024
+        return True, f"驗證通過 ✓  時長 {dur_str}  |  {size_mb:.1f} MB"
+
+    except json.JSONDecodeError:
+        return False, "⚠ ffprobe 輸出解析失敗"
+    except Exception as e:
+        # ffprobe 不存在或超時，不阻擋上傳
+        return True, f"(略過驗證: {e})"
+
+
+def apply_faststart(src: str, dst: str) -> bool:
+    """
+    用 ffmpeg -c copy -movflags +faststart 把 MOOV atom 移到檔首。
+    改善 VRChat/頁面播放器對造ȷ上水影片的讀取。
+    回傳 True = 成功。
+    """
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-i", src,
+             "-c", "copy",
+             "-movflags", "+faststart",
+             "-y", dst],
+            capture_output=True, timeout=300
+        )
+        return r.returncode == 0 and os.path.isfile(dst)
+    except Exception:
+        return False
+
+
+def clamp_playback_speed(speed: float) -> float:
+    return max(PLAYBACK_SPEED_MIN, min(PLAYBACK_SPEED_MAX, speed))
+
+
+def transcode_h264(
+    src: str,
+    dst: str,
+    emit_fn,
+    *,
+    playback_speed: float = 1.0,
+) -> bool:
+    """
+    重新編碼為 H.264，可選時間拉伸（setpts + atempo 保留音高）。
+    使用偵測到的最佳硬體編碼器，失敗時由 hwaccel 模組回退 libx264。
+    """
+    speed = clamp_playback_speed(playback_speed)
+    encoder = hwaccel.get_video_encoder()
+
+    step = "stretch" if speed != 1.0 else "reencode"
+    encoder_label = encoder.label
+    if speed != 1.0:
+        emit_msg = f"時間拉伸 {speed}x + H.264 ({encoder_label})..."
+    else:
+        emit_msg = f"重新編碼 H.264 ({encoder_label})..."
+
+    cmd = ["ffmpeg", "-hide_banner", "-i", src]
+
+    if speed != 1.0:
+        video_chain = f"setpts=PTS/{speed}"
+        if encoder.hw_video_filter:
+            video_chain = f"{video_chain},{encoder.hw_video_filter}"
+        filter_graph = (
+            f"[0:v]{video_chain}[v];[0:a]atempo={speed}[a]"
+        )
+        cmd += [
+            "-filter_complex", filter_graph,
+            "-map", "[v]",
+            "-map", "[a]",
+        ]
+    elif encoder.hw_video_filter:
+        cmd += ["-vf", encoder.hw_video_filter]
+
+    cmd += [
+        "-c:v", encoder.name,
+        *encoder.video_args,
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-movflags", "+faststart",
+        "-y", dst,
+    ]
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        time_pat = re.compile(r"time=(\d+:\d+:\d+\.\d+)")
+        for line in proc.stdout:
+            m = time_pat.search(line)
+            if m:
+                emit_fn(step, f"{emit_msg}  已處理 {m.group(1)}")
+        proc.wait()
+        return proc.returncode == 0 and os.path.isfile(dst)
+    except Exception:
+        return False
+
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+# ──────────────────────────────────────────────
+# 路由：取得格式列表
+# ──────────────────────────────────────────────
+
+@app.route("/api/fetch-formats", methods=["POST"])
+def fetch_formats():
+    data = request.get_json(force=True)
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "請輸入影片網址"}), 400
+
+    cookie_args = get_cookie_args()
+
+    cmd = [
+        "yt-dlp", "-J", "--no-playlist",
+        *cookie_args,
+        url,
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except FileNotFoundError:
+        return jsonify({"error": "找不到 yt-dlp，請先安裝並加入 PATH"}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "取得格式逾時（60 秒）"}), 500
+
+    if result.returncode != 0:
+        err = result.stderr.strip().splitlines()
+        # 取最後幾行當錯誤訊息
+        msg = "\n".join(err[-5:]) if err else "yt-dlp 執行失敗"
+        return jsonify({"error": msg}), 400
+
+    try:
+        info = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return jsonify({"error": "無法解析 yt-dlp 輸出"}), 500
+
+    raw_formats = info.get("formats", [])
+    title = info.get("title", "")
+    duration = info.get("duration")
+    thumbnail = info.get("thumbnail", "")
+
+    # 只保留有影像的格式
+    video_formats = []
+    for f in raw_formats:
+        if f.get("vcodec", "none") == "none":
+            continue
+        width = f.get("width") or 0
+        height = f.get("height") or 0
+        if not height:
+            continue
+
+        size = f.get("filesize") or f.get("filesize_approx")
+        approx = f.get("filesize") is None  # 如果只有 approx 就加 ~
+
+        video_formats.append({
+            "format_id":  f.get("format_id", ""),
+            "resolution": f"{width}x{height}" if width else f"{height}p",
+            "height":     height,
+            "fps":        f.get("fps") or 0,
+            "dynamic_range": (f.get("dynamic_range") or "SDR").upper(),
+            "vcodec_raw": f.get("vcodec", ""),
+            "codec":      simplify_codec(f.get("vcodec", "")),
+            "size":       format_size(size),
+            "size_bytes": size or 0,
+            "size_approx": approx,
+            "acodec":     f.get("acodec", "none"),
+            "ext":        f.get("ext", "mp4"),
+        })
+
+    # 排序：解析度高→低，同解析度按大小高→低
+    video_formats.sort(key=lambda x: (x["height"], x["size_bytes"]), reverse=True)
+
+    return jsonify({
+        "title":    title,
+        "duration": duration,
+        "thumbnail": thumbnail,
+        "formats":  video_formats,
+        "cookie_ok": os.path.isfile(config.COOKIE_PATH),
+    })
+
+
+# ──────────────────────────────────────────────
+# 後台任務：下載 + 上傳
+# ──────────────────────────────────────────────
+
+def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
+               compat_mode: bool, playback_speed: float, q: queue.Queue):
+    """在子執行緒中執行；用 q 回傳進度事件"""
+
+    output_path = None
+
+    def emit(step: str, message: str, **extra):
+        q.put({"type": "status", "step": step, "message": message, **extra})
+
+    def emit_error(msg: str):
+        q.put({"type": "error", "message": msg})
+
+    def emit_result(url_str: str):
+        q.put({"type": "result", "url": url_str})
+
+    try:
+        # ── Step 1: 取影片 ID 決定輸出檔名 ──
+        emit("info", "取得影片資訊...")
+        cookie_args = get_cookie_args()
+
+        id_cmd = ["yt-dlp", "--get-id", "--no-playlist", *cookie_args, url]
+        id_result = subprocess.run(
+            id_cmd, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30
+        )
+        video_id = id_result.stdout.strip() or "video"
+        # 移除危險字元
+        video_id = re.sub(r'[\\/:*?"<>|]', "_", video_id)
+
+        output_path = os.path.join(config.TEMP_DIR, f"{video_id}.mp4")
+
+        # 如果已有暫存檔先刪除
+        if os.path.isfile(output_path):
+            os.remove(output_path)
+
+        # ── Step 2: yt-dlp 下載 ──
+        use_aria2 = has_aria2c()
+        if use_aria2:
+            emit("download", "偵測到 aria2c，啟用 16 執行緒加速下載...")
+        else:
+            emit("download", "開始下載...（安裝 aria2c 可大幅加速）")
+
+        dl_cmd = [
+            "yt-dlp",
+            "-f", f"{format_id}+bestaudio[ext=m4a]/bestaudio",
+            "--merge-output-format", "mp4",
+            "--no-playlist",
+            "--newline",
+            # ── 穩定性：重試與修復 ──
+            "--retries",          "15",   # 整體重試次數
+            "--fragment-retries", "15",   # 單一 DASH 片段重試
+            "--retry-sleep",      "3",    # 每次重試等待秒數
+            "--fixup",            "force", # 強制修復容器問題（防止撕裂）
+            *cookie_args,
+            "-o", output_path,
+            url,
+        ]
+
+        # ── aria2c 多連線 / 內建並發 ──
+        if use_aria2:
+            aria2c_exe = get_aria2c_cmd()
+            dl_cmd += [
+                "--external-downloader",      aria2c_exe,
+                "--external-downloader-args",
+                f"aria2c:-x 16 -s 16 -k 1M --min-split-size=1M"
+                f" --max-connection-per-server=16"
+                f" --retry-wait=3 --max-tries=15",
+            ]
+        else:
+            dl_cmd += ["--concurrent-fragments", "4"]
+
+        proc = subprocess.Popen(
+            dl_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+
+            # 下載進度行
+            if "[download]" in line and "%" in line:
+                m = re.search(r"([\d.]+)%\s+of\s+([\d.]+\w+)\s+at\s+([\d.]+\w+/s)", line)
+                if m:
+                    pct, total, speed = m.group(1), m.group(2), m.group(3)
+                    emit("download", f"下載中  {pct}%  |  {total}  @  {speed}")
+                else:
+                    m2 = re.search(r"([\d.]+)%", line)
+                    if m2:
+                        emit("download", f"下載中  {m2.group(1)}%")
+
+            elif "[Merger]" in line or "Merging formats" in line:
+                emit("merge", "合併音訊與影像...")
+
+            elif "has already been downloaded" in line:
+                emit("download", "找到暫存檔，略過下載")
+
+            elif "[ffmpeg]" in line:
+                emit("merge", "後製處理 (ffmpeg)...")
+
+            # 忽略其他雜訊
+
+        proc.wait()
+        if proc.returncode != 0:
+            emit_error("yt-dlp 下載失敗，請檢查網址或 cookie")
+            return
+
+        if not os.path.isfile(output_path):
+            emit_error("下載完成但找不到輸出檔案")
+            return
+
+        file_size = os.path.getsize(output_path)
+        emit("download", f"下載完成  ({format_size(file_size)})")
+
+        # ── 驗證 MP4 完整性 ──
+        emit("verify", "驗證影片完整性...")
+        v_ok, v_msg = verify_mp4(output_path)
+        emit("verify", v_msg)
+
+        # ── Step 2.5: faststart / 重新編碼 / 時間拉伸 ──
+        speed = clamp_playback_speed(playback_speed)
+        needs_transcode = compat_mode or speed != 1.0
+
+        if needs_transcode:
+            if compat_mode and speed != 1.0:
+                emit("reencode", f"VRChat 相容模式 + 時間拉伸 {speed}x...")
+            elif compat_mode:
+                emit("reencode", "重新編碼為 H.264 VRChat相容模式...")
+            else:
+                emit("stretch", f"時間拉伸 {speed}x（保留音高）...")
+
+            suffix = "_compat.mp4" if compat_mode else "_stretch.mp4"
+            out_path = output_path.replace(".mp4", suffix)
+            ok = transcode_h264(
+                output_path,
+                out_path,
+                emit,
+                playback_speed=speed,
+            )
+            if ok:
+                os.remove(output_path)
+                output_path = out_path
+                file_size = os.path.getsize(output_path)
+                done_step = "stretch" if speed != 1.0 and not compat_mode else "reencode"
+                emit(done_step, f"處理完成  ({format_size(file_size)})")
+            else:
+                fail_msg = "⚠ 處理失敗，使用原始檔案上傳"
+                emit("reencode" if compat_mode else "stretch", fail_msg)
+        else:
+            # 僅加 faststart（速度快，不重編碼）
+            emit("faststart", "準備頁面播放 (faststart)...")
+            fs_path = output_path.replace(".mp4", "_fs.mp4")
+            if apply_faststart(output_path, fs_path):
+                os.remove(output_path)
+                output_path = fs_path
+                file_size = os.path.getsize(output_path)
+                emit("faststart", f"faststart 完成  ({format_size(file_size)})")
+            else:
+                emit("faststart", "(faststart 略過，使用原始檔案)")
+
+        # ── Step 3: 向 Worker 取 presigned URL ──
+        emit("presign", "向 Cloudflare R2 取得上傳憑證...")
+
+        safe_key = key_phrase.strip() if key_phrase else ""
+        filename_encoded = urllib.parse.quote(os.path.basename(output_path))
+
+        presign_payload = {
+            "cmd": "admin_get_presigned",
+            "password": config.ADMIN_PASS,
+            "filename": filename_encoded,
+            "filetype": "video/mp4",
+            "keyPhrase": safe_key,
+            "ttl": str(ttl),
+        }
+
+        try:
+            sign_resp = requests.post(
+                config.WORKER_URL,
+                json=presign_payload,
+                timeout=30,
+            )
+            sign_data = sign_resp.json()
+        except Exception as e:
+            emit_error(f"取得憑證失敗：{e}")
+            return
+
+        if sign_data.get("status") != 200:
+            emit_error(sign_data.get("error", "取得憑證失敗"))
+            return
+
+        upload_url   = sign_data["uploadUrl"]
+        r2_key       = sign_data["key"]
+        expires_val  = sign_data["expiresValue"]
+
+        # ── Step 4: PUT 上傳 ──
+        emit("upload", "上傳至 Cloudflare R2...")
+
+        class ProgressReader:
+            """
+            File-like wrapper 連 __len__ 一起定義，
+            讓 requests/urllib3 使用 Content-Length 而不是 chunked transfer。
+            R2 presigned URL 不接受 chunked，就是 10054 的原因。
+            """
+            def __init__(self, path, total, q_ref):
+                self._f = open(path, "rb")
+                self._total = total
+                self._uploaded = 0
+                self._q = q_ref
+                self._last_pct = -1
+
+            def read(self, size=-1):
+                chunk = self._f.read(size) if (size and size > 0) else self._f.read()
+                self._uploaded += len(chunk)
+                if self._total > 0:
+                    pct = int(self._uploaded / self._total * 100)
+                    if pct != self._last_pct:
+                        self._last_pct = pct
+                        emit("upload",
+                             f"上傳至 R2  {pct}%  "
+                             f"({format_size(self._uploaded)} / {format_size(self._total)})")
+                return chunk
+
+            def __len__(self):
+                return self._total
+
+            def close(self):
+                self._f.close()
+
+        reader = ProgressReader(output_path, file_size, q)
+        try:
+            up_resp = requests.put(
+                upload_url,
+                data=reader,
+                headers={
+                    "Content-Type": "video/mp4",
+                    "x-amz-meta-filename": filename_encoded,
+                    "x-amz-meta-expires": expires_val,
+                },
+                timeout=3600,
+            )
+        except Exception as e:
+            emit_error(f"上傳失敗：{e}")
+            return
+        finally:
+            reader.close()
+
+        if up_resp.status_code not in (200, 201):
+            emit_error(f"R2 拒絕上傳 (HTTP {up_resp.status_code})")
+            return
+
+        final_url = f"{config.WORKER_URL}/{r2_key}"
+        emit("done", "上傳完成！")
+        emit_result(final_url)
+
+    except Exception as e:
+        emit_error(f"意外錯誤：{e}")
+
+    finally:
+        # 清理暫存檔
+        if output_path and os.path.isfile(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+        q.put(None)  # sentinel：結束串流
+
+
+# ──────────────────────────────────────────────
+# 路由：SSE 處理串流
+# ──────────────────────────────────────────────
+
+@app.route("/api/process", methods=["POST"])
+def process():
+    data = request.get_json(force=True)
+    url        = (data.get("url") or "").strip()
+    format_id  = (data.get("format_id") or "").strip()
+    key_phrase = data.get("key_phrase", "")
+    ttl        = int(data.get("ttl", config.DEFAULT_TTL))
+    compat_mode = bool(data.get("compat_mode", False))
+    playback_speed = clamp_playback_speed(float(data.get("playback_speed", 1.0)))
+
+    if not url or not format_id:
+        return jsonify({"error": "缺少必要參數"}), 400
+
+    q = queue.Queue()
+    t = threading.Thread(
+        target=do_process,
+        args=(url, format_id, key_phrase, ttl, compat_mode, playback_speed, q),
+        daemon=True,
+    )
+    t.start()
+
+    def generate():
+        while True:
+            try:
+                msg = q.get(timeout=120)
+            except queue.Empty:
+                yield "data: {\"type\":\"error\",\"message\":\"逾時，請重試\"}\n\n"
+                break
+            if msg is None:
+                break
+            yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+# ──────────────────────────────────────────────
+# 路由：cookie 狀態
+# ──────────────────────────────────────────────
+
+@app.route("/api/cookie-status")
+def cookie_status():
+    return jsonify({"exists": os.path.isfile(config.COOKIE_PATH)})
+
+
+@app.route("/api/hwaccel-status")
+def hwaccel_status():
+    encoder = hwaccel.get_video_encoder()
+    return jsonify({
+        "encoder": encoder.name,
+        "label": encoder.label,
+        "fallback": encoder.fallback,
+    })
+
+
+# ──────────────────────────────────────────────
+# 路由：像素復古版
+# ──────────────────────────────────────────────
+
+@app.route("/retro")
+def retro():
+    return render_template("index_pixel.html")
+
+
+# ──────────────────────────────────────────────
+# 入口
+# ──────────────────────────────────────────────
+
+if __name__ == "__main__":
+    encoder = hwaccel.get_video_encoder()
+    print(f"[bili2vrchat] 啟動於 http://localhost:{config.PORT}")
+    print(f"[bili2vrchat] Cookie 路徑：{config.COOKIE_PATH}")
+    print(f"[bili2vrchat] 影片編碼器：{encoder.label} ({encoder.name})")
+    app.run(host=config.HOST, port=config.PORT, threaded=True, debug=False)

@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.git
+.gitignore
+temp/*
+cookies/bilibili.txt
+aria2c.exe
+aria2c
+start.bat
+start.sh
