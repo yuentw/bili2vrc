@@ -1,4 +1,4 @@
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -13,15 +13,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py config.py hwaccel.py ./
 COPY templates/ templates/
+COPY static/ static/
 COPY cookies/README.md cookies/
 
-RUN mkdir -p temp cookies
+RUN mkdir -p temp
 
 ENV HOST=0.0.0.0 \
     PORT=5000
 
 EXPOSE 5000
 
-VOLUME ["/app/cookies", "/app/temp"]
+VOLUME ["/app/temp"]
 
 CMD ["python", "app.py"]

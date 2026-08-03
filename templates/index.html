@@ -136,6 +136,41 @@
       color: var(--warn);
       padding: 6px 0 0;
     }
+    .cookie-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .cookie-row input[type="file"] {
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 220px;
+    }
+    #cookieStatus {
+      font-size: 12px;
+      color: var(--muted);
+      flex: 1;
+      min-width: 140px;
+    }
+    .cookie-platforms {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 12px;
+      flex: 1;
+      min-width: 180px;
+    }
+    .cookie-platforms .ok { color: var(--success); }
+    .cookie-platforms .warn { color: var(--warn); }
+    #cookieUploadMsg {
+      font-size: 12px;
+      color: var(--success);
+      width: 100%;
+    }
 
     /* ── Format table ── */
     .table-wrap {
@@ -395,7 +430,7 @@
 
 <header>
   <h1>🎬 bili2vrchat</h1>
-  <span class="badge">B站 → R2 → VRChat</span>
+  <span class="badge">B站 / YouTube → R2 → VRChat</span>
 </header>
 
 <main>
@@ -405,10 +440,16 @@
     <div class="section-title">影片網址</div>
     <div class="section-body">
       <div class="url-row">
-        <input type="text" id="urlInput" placeholder="貼入 B 站影片網址，如 https://www.bilibili.com/video/BV..." autocomplete="off" spellcheck="false">
+        <input type="text" id="urlInput" placeholder="B站或 YouTube 網址，如 bilibili.com/video/... 或 youtube.com/watch?v=..." autocomplete="off" spellcheck="false">
         <button class="btn btn-primary" id="fetchBtn" onclick="fetchFormats()">獲取格式</button>
       </div>
-      <div id="cookieWarning">⚠ 未找到 cookies/bilibili.txt，若影片需要登入將無法下載</div>
+      <div id="cookieWarning">⚠ 此網址可能需要登入 cookie，請先上傳對應平台的 cookies.txt</div>
+      <div class="cookie-row">
+        <input type="file" id="cookieFile" accept=".txt,text/plain">
+        <button class="btn btn-ghost" type="button" onclick="uploadCookie()">儲存到瀏覽器</button>
+        <div class="cookie-platforms" id="cookiePlatforms"></div>
+      </div>
+      <div id="cookieUploadMsg"></div>
     </div>
   </div>
 
@@ -494,6 +535,7 @@
     <div class="section-body">
       <div class="action-bar">
         <button class="btn btn-primary" id="processBtn" onclick="startProcess()" disabled>下載並上傳</button>
+        <button class="btn btn-ghost" id="cancelBtn" onclick="cancelProcess()" style="display:none">取消</button>
         <div id="selInfo">尚未選擇格式</div>
       </div>
     </div>
@@ -525,14 +567,83 @@
 
 </main>
 
+<script src="/static/cookies.js"></script>
 <script>
 // ── 狀態 ──
 let selectedFormat = null;
+let activeJobId = null;
 let resultUrl = '';
 
-// ── 啟動時檢查 cookie ──
-fetch('/api/cookie-status').then(r => r.json()).then(d => {
-  document.getElementById('cookieWarning').style.display = d.exists ? 'none' : 'block';
+// ── Cookie (localStorage) ──
+function updateCookieUI() {
+  const status = CookieStore.getCookieStatus();
+  const platformsEl = document.getElementById('cookiePlatforms');
+  platformsEl.innerHTML = CookieStore.PLATFORMS.map(platform => {
+    const label = CookieStore.platformLabel(platform);
+    const cls = status[platform] ? 'ok' : 'warn';
+    const text = status[platform] ? '已設定' : '未設定';
+    const clearBtn = status[platform]
+      ? `<button class="btn btn-ghost" type="button" style="padding:2px 8px;font-size:11px" onclick="clearCookie('${platform}')">清除</button>`
+      : '';
+    return `<div class="${cls}">${label}: ${text} ${clearBtn}</div>`;
+  }).join('');
+  updateCookieWarningForUrl(document.getElementById('urlInput').value.trim());
+}
+
+function updateCookieWarningForUrl(url) {
+  const warn = document.getElementById('cookieWarning');
+  const platform = CookieStore.detectPlatformFromUrl(url);
+  if (!platform) {
+    warn.style.display = 'none';
+    return;
+  }
+  const hasCookie = CookieStore.getCookieStatus()[platform];
+  warn.style.display = hasCookie ? 'none' : 'block';
+  if (!hasCookie) {
+    warn.textContent = `⚠ 此 ${CookieStore.platformLabel(platform)} 網址可能需要 cookie，請上傳 cookies.txt（依檔案內容自動辨識平台）`;
+  }
+}
+
+function buildRequestBody(url, extra = {}) {
+  const cookieContent = CookieStore.getCookieForUrl(url);
+  const body = { url, ...extra };
+  if (cookieContent) body.cookie_content = cookieContent;
+  return body;
+}
+
+async function uploadCookie() {
+  const input = document.getElementById('cookieFile');
+  const msgEl = document.getElementById('cookieUploadMsg');
+  msgEl.textContent = '';
+  if (!input.files || !input.files.length) {
+    alert('請先選擇 cookies.txt 檔案');
+    return;
+  }
+  const file = input.files[0];
+  try {
+    const content = await file.text();
+    const result = CookieStore.saveCookieFromFile(content, file.name);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    input.value = '';
+    msgEl.textContent = result.message;
+    updateCookieUI();
+  } catch (e) {
+    alert('讀取失敗：' + e.message);
+  }
+}
+
+function clearCookie(platform) {
+  CookieStore.clearCookie(platform);
+  document.getElementById('cookieUploadMsg').textContent = `已清除 ${CookieStore.platformLabel(platform)} cookie`;
+  updateCookieUI();
+}
+
+updateCookieUI();
+document.getElementById('urlInput').addEventListener('input', e => {
+  updateCookieWarningForUrl(e.target.value.trim());
 });
 
 fetch('/api/hwaccel-status').then(r => r.json()).then(d => {
@@ -574,7 +685,7 @@ async function fetchFormats() {
     const res = await fetch('/api/fetch-formats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify(buildRequestBody(url)),
     });
     const data = await res.json();
 
@@ -585,7 +696,7 @@ async function fetchFormats() {
 
     renderVideoMeta(data);
     renderFormats(data.formats || []);
-    document.getElementById('cookieWarning').style.display = data.cookie_ok ? 'none' : 'block';
+    updateCookieWarningForUrl(url);
 
   } catch (e) {
     setBody(`<tr><td colspan="5" class="empty-hint" style="color:var(--danger)">網路錯誤：${esc(e.message)}</td></tr>`);
@@ -692,19 +803,22 @@ async function startProcess() {
 
   document.getElementById('processBtn').disabled = true;
   document.getElementById('fetchBtn').disabled   = true;
+  activeJobId = null;
+  const cancelBtn = document.getElementById('cancelBtn');
+  cancelBtn.style.display = 'none';
+  cancelBtn.disabled = false;
 
   try {
     const response = await fetch('/api/process', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url,
+      body: JSON.stringify(buildRequestBody(url, {
         format_id: selectedFormat.format_id,
         key_phrase: keyPhrase,
         ttl,
         compat_mode: compatMode,
         playback_speed: playbackSpeed,
-      }),
+      })),
     });
 
     const reader = response.body.getReader();
@@ -731,18 +845,43 @@ async function startProcess() {
   } catch (e) {
     setStatus('error', `連線中斷：${e.message}`);
   } finally {
+    activeJobId = null;
+    document.getElementById('cancelBtn').style.display = 'none';
     document.getElementById('processBtn').disabled = false;
     document.getElementById('fetchBtn').disabled   = false;
   }
 }
 
+async function cancelProcess() {
+  if (!activeJobId) return;
+  const cancelBtn = document.getElementById('cancelBtn');
+  cancelBtn.disabled = true;
+  setStatus('spin', '正在取消...');
+  try {
+    await fetch('/api/process/cancel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: activeJobId }),
+    });
+  } catch (_) {}
+}
+
 function handleEvent(evt) {
-  if (evt.type === 'status') {
+  if (evt.type === 'started') {
+    activeJobId = evt.job_id;
+    const cancelBtn = document.getElementById('cancelBtn');
+    cancelBtn.style.display = '';
+    cancelBtn.disabled = false;
+  } else if (evt.type === 'status') {
     const dotClass = evt.step === 'done' ? 'done' : 'spin';
     setStatus(dotClass, evt.message);
   } else if (evt.type === 'error') {
+    activeJobId = null;
+    document.getElementById('cancelBtn').style.display = 'none';
     setStatus('error', '❌ ' + evt.message);
   } else if (evt.type === 'result') {
+    activeJobId = null;
+    document.getElementById('cancelBtn').style.display = 'none';
     setStatus('done', '完成');
     showResult(evt.url);
   }
