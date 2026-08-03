@@ -24,6 +24,10 @@ R2_CLEANUP_INTERVAL  = int(os.environ.get("R2_CLEANUP_INTERVAL", "3600"))  # sec
 
 # ── Local paths / 本地路徑 ──
 TEMP_DIR     = os.path.join(BASE_DIR, "temp")
+FRONTEND_DIST = os.environ.get(
+    "FRONTEND_DIST",
+    os.path.join(BASE_DIR, "frontend", ".output", "public"),
+)
 
 # ── Defaults / 預設值 ──
 DEFAULT_TTL  = int(os.environ.get("DEFAULT_TTL", "604800"))  # 7 days (seconds) / 7 天（秒）

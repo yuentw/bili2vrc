@@ -17,7 +17,7 @@ import urllib.parse
 from contextlib import contextmanager
 
 import requests
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, request, send_from_directory
 
 import config
 import hwaccel
@@ -481,11 +481,6 @@ def transcode_h264(
         logger.exception("transcode error: %s", exc)
         return False
 
-
-
-@app.route("/")
-def index():
-    return render_template("index.html")
 
 
 # ──────────────────────────────────────────────
@@ -995,15 +990,6 @@ def hwaccel_status():
 
 
 # ──────────────────────────────────────────────
-# 路由：像素復古版
-# ──────────────────────────────────────────────
-
-@app.route("/retro")
-def retro():
-    return render_template("index_pixel.html")
-
-
-# ──────────────────────────────────────────────
 # R2 過期檔案清理（背景執行）
 # ──────────────────────────────────────────────
 
@@ -1051,6 +1037,38 @@ def start_r2_cleanup_thread() -> None:
 
 
 # ──────────────────────────────────────────────
+# 路由：Nuxt 前端靜態檔
+# ──────────────────────────────────────────────
+
+def _frontend_fallback_name() -> str:
+    dist = config.FRONTEND_DIST
+    if os.path.isfile(os.path.join(dist, "200.html")):
+        return "200.html"
+    return "index.html"
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_frontend(path: str):
+    if path.startswith("api/"):
+        abort(404)
+    dist = config.FRONTEND_DIST
+    if path and os.path.isfile(os.path.join(dist, path)):
+        return send_from_directory(dist, path)
+    return send_from_directory(dist, _frontend_fallback_name())
+
+
+def _warn_if_frontend_missing() -> None:
+    dist = config.FRONTEND_DIST
+    fallback = _frontend_fallback_name()
+    if not os.path.isfile(os.path.join(dist, fallback)):
+        logger.warning(
+            "frontend dist missing (%s); run: cd frontend && bun install && bun run generate",
+            dist,
+        )
+
+
+# ──────────────────────────────────────────────
 # 入口
 # ──────────────────────────────────────────────
 
@@ -1058,5 +1076,6 @@ if __name__ == "__main__":
     encoder = hwaccel.get_video_encoder()
     logger.info("listening on http://%s:%s", config.HOST, config.PORT)
     logger.info("video encoder: %s (%s)", encoder.label, encoder.name)
+    _warn_if_frontend_missing()
     start_r2_cleanup_thread()
     app.run(host=config.HOST, port=config.PORT, threaded=True, debug=False)

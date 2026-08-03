@@ -1,0 +1,458 @@
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Desktop (XP Teal / Olive) ── */
+    body {
+      background-color: #3a6ea5;
+      background-image:
+        radial-gradient(ellipse at 30% 40%, rgba(255,255,255,0.08) 0%, transparent 60%);
+      font-family: Tahoma, Verdana, Arial, "MS Sans Serif", sans-serif;
+      font-size: 11px;
+      color: #000;
+      min-height: 100vh;
+      padding: 10px;
+    }
+
+    /* ── Page wrapper ── */
+    .page-wrap {
+      width: 780px;
+      margin: 0 auto;
+    }
+
+    /* ═══════════════════════════════════════
+       WINDOW CHROME
+    ═══════════════════════════════════════ */
+    .xp-window {
+      background: #ece9d8;
+      border: 1px solid #0a246a;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.5),
+                  inset 1px 1px 0 rgba(255,255,255,0.6);
+      margin-bottom: 6px;
+    }
+
+    /* ── Titlebar ── */
+    .titlebar {
+      background: linear-gradient(to right, #0a246a 0%, #a6b8d5 100%);
+      padding: 3px 4px 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+    }
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: white;
+      font-weight: bold;
+      font-size: 11px;
+      text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+    }
+    .titlebar-icon { font-size: 13px; }
+
+    .win-controls { display: flex; gap: 2px; }
+    .wc-btn {
+      width: 21px; height: 21px;
+      background: linear-gradient(to bottom, #e8e4d8 0%, #c4bfb0 100%);
+      border: 1px solid;
+      border-color: #fff #707070 #707070 #fff;
+      font-size: 9px; font-weight: bold; font-family: Marlett, Wingdings, monospace;
+      cursor: default;
+      display: flex; align-items: center; justify-content: center;
+      color: #000;
+    }
+    .wc-btn:hover { background: linear-gradient(to bottom, #f0ede0, #d0ccc0); }
+    .wc-btn.close { background: linear-gradient(to bottom, #e8a020, #c07010); border-color: #ffdf80 #804000 #804000 #ffdf80; color: white; }
+    .wc-btn.close:hover { background: linear-gradient(to bottom, #ff6020, #d03000); }
+
+    /* ── Menu bar ── */
+    .menubar {
+      background: #ece9d8;
+      border-bottom: 1px solid #aca899;
+      padding: 1px 2px;
+      display: flex;
+      gap: 0;
+    }
+    .menu-item {
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: default;
+    }
+    .menu-item:hover { background: #316ac5; color: white; }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      background: linear-gradient(to bottom, #e0ddd0, #ccc9ba);
+      border-bottom: 1px solid #aca899;
+      padding: 3px 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .tb-sep { width: 1px; background: #888; height: 22px; margin: 0 2px; }
+
+    /* ── Address bar ── */
+    .addrbar {
+      background: #d4d0c8;
+      border-bottom: 1px solid #aca899;
+      padding: 3px 4px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .addr-label { font-size: 11px; color: #000; }
+    .addr-input {
+      flex: 1; height: 22px;
+      background: white;
+      border: 2px solid;
+      border-color: #707070 #d4d0c8 #d4d0c8 #707070;
+      padding: 1px 5px;
+      font-family: Tahoma, Verdana; font-size: 11px;
+      color: #0000cc;
+      outline: none;
+    }
+    .addr-input::placeholder { color: #aaa; }
+    .addr-input:focus { border-color: #316ac5 #d4d0c8 #d4d0c8 #316ac5; }
+    .addr-go {
+      background: linear-gradient(to bottom, #e8e4d8, #c8c4b4);
+      border: 1px solid; border-color: #fff #707070 #707070 #fff;
+      padding: 2px 8px; font-size: 11px; cursor: default;
+    }
+    .addr-go:hover { background: linear-gradient(to bottom, #d0d8f0, #b0b8d8); }
+
+    /* ── IE Info bar (cookie warning) ── */
+    .ie-infobar {
+      display: none;
+      background: #fffacd;
+      border-bottom: 1px solid #c8a000;
+      padding: 3px 8px;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+    .ie-infobar span { color: #804000; }
+    .ie-infobar-btn {
+      background: linear-gradient(to bottom, #e8e4d8, #c8c4b4);
+      border: 1px solid; border-color: #fff #707070 #707070 #fff;
+      font-size: 10px; padding: 1px 6px; cursor: default; margin-left: auto;
+    }
+    .cookie-panel-body {
+      padding: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+    .cookie-panel-body input[type="file"] {
+      font-size: 11px;
+      max-width: 200px;
+    }
+    #cookieStatusText { color: #0a246a; flex: 1; min-width: 120px; }
+    #cookiePlatforms { display: flex; flex-direction: column; gap: 2px; font-size: 11px; flex: 1; }
+    #cookiePlatforms .ok { color: #006400; }
+    #cookiePlatforms .warn { color: #804000; }
+    #cookieUploadMsg { font-size: 11px; color: #006400; width: 100%; margin-top: 4px; }
+
+    /* ── Marquee strip ── */
+    .marquee-strip {
+      background: #000082;
+      color: #ffff00;
+      font-size: 11px;
+      font-family: "Courier New", monospace;
+      padding: 2px 0;
+      border-bottom: 2px solid #0000cc;
+    }
+
+    /* ═══════════════════════════════════════
+       BODY CONTENT
+    ═══════════════════════════════════════ */
+    .xp-body { padding: 8px; }
+
+    /* ── Panel / Section ── */
+    .xp-panel {
+      border: 2px solid;
+      border-color: #fff #707070 #707070 #fff;
+      background: white;
+      margin-bottom: 8px;
+    }
+    .xp-panel-title {
+      background: linear-gradient(to right, #316ac5 0%, #88aadd 100%);
+      color: white;
+      font-weight: bold;
+      font-size: 11px;
+      padding: 2px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ── Table (Windows Explorer list view) ── */
+    .xp-listview { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .xp-listview thead th {
+      background: linear-gradient(to bottom, #e0ddd0 0%, #c8c4b4 100%);
+      border: 1px solid;
+      border-color: #fff #808080 #808080 #fff;
+      padding: 3px 6px;
+      text-align: left;
+      font-weight: bold;
+      cursor: default;
+      white-space: nowrap;
+    }
+    .xp-listview thead th:hover { background: linear-gradient(to bottom, #d0d8f8 0%, #b8c0e8 100%); }
+    .xp-listview tbody tr { background: white; cursor: default; }
+    .xp-listview tbody tr:nth-child(even) { background: #f5f4ee; }
+    .xp-listview tbody tr:hover { background: #e0eaff; }
+    .xp-listview tbody tr.selected td {
+      background: #316ac5;
+      color: white;
+    }
+    .xp-listview tbody td {
+      border-bottom: 1px solid #e0ddd0;
+      border-right: 1px solid #e0ddd0;
+      padding: 2px 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .xp-listview .right { text-align: right; }
+
+    .codec-tag {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: bold;
+      padding: 0 3px;
+      color: white;
+      background: #316ac5;
+    }
+    .c265 { background: #6b5e12; }
+    .cav1 { background: #7a3a10; }
+    .cvp9 { background: #2a6a1a; }
+
+    /* ── Form fields ── */
+    .xp-label {
+      display: block;
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+    .xp-input, .xp-select {
+      width: 100%;
+      height: 22px;
+      background: white;
+      border: 2px solid;
+      border-color: #707070 #d4d0c8 #d4d0c8 #707070;
+      padding: 1px 4px;
+      font-family: Tahoma, Verdana; font-size: 11px;
+      outline: none;
+    }
+    .xp-input:focus { border-color: #316ac5 #d4d0c8 #d4d0c8 #316ac5; }
+    .xp-select option { font-family: Tahoma; }
+
+    .field-row { display: flex; gap: 8px; margin-bottom: 6px; }
+    .field-col { flex: 1; }
+
+    /* ── Checkbox ── */
+    .xp-check-label {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; cursor: default;
+    }
+
+    /* ── XP Button ── */
+    .xp-btn {
+      background: linear-gradient(to bottom, #f0ede0 0%, #d0ccbc 100%);
+      border: 1px solid;
+      border-color: #fff #7f9db9 #7f9db9 #fff;
+      outline: 1px solid #7f9db9;
+      outline-offset: -2px;
+      color: #000;
+      font-family: Tahoma, Verdana; font-size: 11px;
+      padding: 3px 16px;
+      min-width: 80px;
+      cursor: default;
+      white-space: nowrap;
+    }
+    .xp-btn:hover {
+      background: linear-gradient(to bottom, #e8e8f8 0%, #c0c8e8 100%);
+      outline-color: #316ac5;
+    }
+    .xp-btn:active {
+      background: linear-gradient(to bottom, #c0c4d4 0%, #d8dce8 100%);
+      border-color: #707070 #fff #fff #707070;
+      padding: 4px 15px 2px 17px;
+    }
+    .xp-btn:disabled { color: #808080; text-shadow: 1px 1px 0 #fff; }
+
+    .xp-btn-primary {
+      background: linear-gradient(to bottom, #4a8ed8 0%, #2b5db7 100%);
+      border-color: #fff #1a3a80 #1a3a80 #fff;
+      outline-color: #1a3a80;
+      color: white;
+      font-weight: bold;
+      text-shadow: 1px 1px 1px rgba(0,0,0,0.4);
+    }
+    .xp-btn-primary:hover {
+      background: linear-gradient(to bottom, #5a9ee8 0%, #3b6dc7 100%);
+    }
+    .xp-btn-primary:active {
+      background: linear-gradient(to bottom, #3a7ec8 0%, #4b7dd7 100%);
+    }
+    .xp-btn-primary:disabled {
+      background: linear-gradient(to bottom, #a0a8b8, #8890a0);
+      color: #d0d4dc;
+      text-shadow: none;
+    }
+
+    /* ── XP Progress bar (like IE download) ── */
+    .xp-progress {
+      display: none;
+      background: white;
+      border: 2px solid;
+      border-color: #707070 #d4d0c8 #d4d0c8 #707070;
+      height: 20px;
+      margin: 4px 0;
+      overflow: hidden;
+    }
+    .xp-progress-fill {
+      height: 100%;
+      width: 100%;
+      background: repeating-linear-gradient(
+        90deg,
+        #3a85cc 0px, #3a85cc 9px,
+        #2060a0 9px, #2060a0 12px
+      );
+      animation: xpScroll 0.5s linear infinite;
+    }
+    @keyframes xpScroll {
+      from { background-position: 0 0; }
+      to   { background-position: 12px 0; }
+    }
+
+    /* ── Status display ── */
+    .xp-status-text {
+      display: none;
+      background: #fffbf0;
+      border: 1px solid #c8a000;
+      padding: 3px 8px;
+      font-size: 11px;
+      margin: 4px 0;
+    }
+
+    /* ── Result ── */
+    .xp-result {
+      display: none;
+      background: #e8f0ff;
+      border: 2px solid;
+      border-color: #fff #316ac5 #316ac5 #fff;
+      padding: 8px;
+      margin-top: 6px;
+    }
+    .xp-result-title {
+      font-weight: bold; font-size: 11px; color: #0a246a; margin-bottom: 5px;
+    }
+    .xp-result-row { display: flex; gap: 4px; align-items: center; }
+    .xp-result-url {
+      flex: 1; height: 22px;
+      background: white;
+      border: 2px solid; border-color: #707070 #d4d0c8 #d4d0c8 #707070;
+      padding: 1px 4px;
+      font-family: Tahoma; font-size: 11px;
+      color: #0000cc;
+      cursor: text;
+      user-select: all;
+      outline: none;
+    }
+    .xp-hint { font-size: 10px; color: #316ac5; margin-top: 4px; }
+    #previewVideo {
+      width: 100%;
+      max-height: 240px;
+      margin-top: 6px;
+      background: #000;
+      border: 2px solid;
+      border-color: #707070 #d4d0c8 #d4d0c8 #707070;
+    }
+    .preview-speed {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      font-size: 11px;
+      color: #0a246a;
+    }
+    .preview-speed input[type="range"] { flex: 1; }
+    #hwEncoderLabel {
+      font-size: 10px;
+      color: #316ac5;
+      margin-top: 4px;
+    }
+    #videoMeta {
+      display: none;
+      background: #fff;
+      border: 2px solid;
+      border-color: #fff #aca899 #aca899 #fff;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .video-meta-inner {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    #videoThumb {
+      width: 128px;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      border: 2px solid;
+      border-color: #707070 #d4d0c8 #d4d0c8 #707070;
+      background: #000;
+      flex-shrink: 0;
+    }
+    .video-meta-text { flex: 1; min-width: 0; }
+    #videoTitle {
+      font-size: 12px;
+      font-weight: bold;
+      color: #0a246a;
+      line-height: 1.4;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+    .video-meta-sub {
+      font-size: 11px;
+      color: #444;
+      line-height: 1.5;
+    }
+
+    /* ── Divider ── */
+    .xp-hr { border: none; border-top: 1px solid #aca899; border-bottom: 1px solid #fff; margin: 8px 0; }
+
+    /* ── Status bar ── */
+    .statusbar {
+      background: #d4d0c8;
+      border-top: 1px solid #aca899;
+      padding: 2px 4px;
+      display: flex;
+      gap: 3px;
+      font-size: 11px;
+    }
+    .sb-panel {
+      border: 1px solid;
+      border-color: #707070 #d4d0c8 #d4d0c8 #707070;
+      padding: 0 6px;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sb-fixed { flex: 0 0 auto; }
+
+    /* ── Empty hint ── */
+    .empty-hint { text-align: center; color: #808080; padding: 24px; font-style: italic; }
+
+    /* ── Page footer ── */
+    .page-footer {
+      text-align: center;
+      font-size: 10px;
+      color: #c8d4e8;
+      padding: 6px;
+      line-height: 1.7;
+    }
+    .page-footer a { color: #c8d4e8; }
