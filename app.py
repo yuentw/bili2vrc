@@ -301,7 +301,9 @@ def _bundled_aria2c_path() -> str | None:
 
 
 def has_aria2c() -> bool:
-    """偵測 aria2c：先查專案目錄 bundled binary，再查 PATH"""
+    """偵測 aria2c：先查專案目錄 bundled binary，再查 PATH（可由 DISABLE_ARIA2C 關閉）"""
+    if config.DISABLE_ARIA2C:
+        return False
     if _bundled_aria2c_path():
         return True
     return shutil.which("aria2c") is not None

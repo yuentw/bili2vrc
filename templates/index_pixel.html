@@ -562,8 +562,11 @@
       <!-- Format list -->
       <div class="xp-panel">
         <div class="xp-panel-title">
-          <span>📋 格式列表</span>
-          <span id="fmtCount" style="font-weight:normal;font-size:10px"></span>
+          <span>📋 格式列表 <span id="fmtCount" style="font-weight:normal;font-size:10px"></span></span>
+          <label style="display:flex;align-items:center;gap:4px;font-weight:normal;font-size:10px">
+            <span>編碼:</span>
+            <select class="xp-select" id="codecFilter" style="font-size:10px;padding:1px 4px;min-width:110px" onchange="applyCodecFilter()" disabled></select>
+          </label>
         </div>
         <div style="overflow-x:auto;border-top:1px solid #aca899">
           <table class="xp-listview" id="fmtTable">
@@ -795,6 +798,8 @@ async function fetchFormats() {
   const btn = document.getElementById('fetchBtn');
   btn.disabled = true; btn.textContent = '載入中...';
   document.getElementById('fmtCount').textContent = '';
+  document.getElementById('codecFilter').innerHTML = '';
+  document.getElementById('codecFilter').disabled = true;
   document.getElementById('videoMeta').style.display = 'none';
   selectedFormat = null;
   document.getElementById('processBtn').disabled = true;
@@ -854,11 +859,56 @@ function renderVideoMeta(data) {
 }
 
 function renderFormats(formats) {
+  window._allFormats = formats;
+  const filterEl = document.getElementById('codecFilter');
+
   if (!formats.length) {
+    filterEl.innerHTML = '';
+    filterEl.disabled = true;
     setBody('<tr><td colspan="5" class="empty-hint">未找到可用格式</td></tr>');
+    document.getElementById('fmtCount').textContent = '';
     return;
   }
-  document.getElementById('fmtCount').textContent = `共 ${formats.length} 個格式`;
+
+  populateCodecFilter(formats);
+  applyCodecFilter();
+}
+
+function populateCodecFilter(formats) {
+  const select = document.getElementById('codecFilter');
+  const order = ['h264', 'h265', 'av1', 'vp9', 'other'];
+  const families = [...new Set(formats.map(f => normalizeCodecFamily(f.codec)))];
+  families.sort((a, b) => {
+    const ai = order.indexOf(a);
+    const bi = order.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+
+  select.innerHTML = families.map(family =>
+    `<option value="${family}">${codecFamilyLabel(family)}</option>`
+  ).join('');
+  select.value = families.includes('h264') ? 'h264' : families[0];
+  select.disabled = families.length <= 1;
+}
+
+function applyCodecFilter() {
+  const all = window._allFormats || [];
+  const family = document.getElementById('codecFilter').value;
+  const filtered = all.filter(f => normalizeCodecFamily(f.codec) === family);
+  renderFormatRows(filtered, all.length);
+}
+
+function renderFormatRows(formats, totalCount) {
+  window._formats = formats;
+  updateFmtCount(formats.length, totalCount ?? formats.length);
+
+  if (!formats.length) {
+    setBody('<tr><td colspan="5" class="empty-hint">此編碼無可用格式</td></tr>');
+    selectedFormat = null;
+    document.getElementById('processBtn').disabled = true;
+    document.getElementById('selInfo').textContent = '尚未選擇格式';
+    return;
+  }
 
   const rows = formats.map((f, i) => {
     const cls = codecClass(f.codec);
@@ -874,12 +924,37 @@ function renderFormats(formats) {
     </tr>`;
   }).join('');
   setBody(rows);
-  window._formats = formats;
-  const first = document.querySelector('#fmtBody tr[data-idx="0"]');
-  if (first) selectRow(first, 0);
+  selectRow(document.querySelector('#fmtBody tr[data-idx="0"]'), 0);
+}
+
+function updateFmtCount(shown, total) {
+  const el = document.getElementById('fmtCount');
+  el.textContent = shown === total ? `共 ${shown} 個` : `${shown} / ${total} 個`;
+}
+
+function normalizeCodecFamily(codec) {
+  if (!codec) return 'other';
+  const c = codec.toLowerCase();
+  if (c.includes('h.264') || c.includes('264') || c.includes('avc')) return 'h264';
+  if (c.includes('h.265') || c.includes('265') || c.includes('hevc')) return 'h265';
+  if (c.includes('av1')) return 'av1';
+  if (c.includes('vp9')) return 'vp9';
+  return 'other';
+}
+
+function codecFamilyLabel(family) {
+  const labels = {
+    h264: 'H.264',
+    h265: 'H.265 / HEVC',
+    av1: 'AV1',
+    vp9: 'VP9',
+    other: '其他',
+  };
+  return labels[family] || family;
 }
 
 function selectRow(tr, idx) {
+  if (!tr) return;
   document.querySelectorAll('#fmtBody tr').forEach(r => r.classList.remove('selected'));
   tr.classList.add('selected');
   selectedFormat = window._formats[idx];
@@ -894,6 +969,7 @@ function selectRow(tr, idx) {
 function codecClass(c) {
   if (!c) return '';
   const l = c.toLowerCase();
+  if (l.includes('264') || l.includes('avc')) return '';
   if (l.includes('265') || l.includes('hevc')) return 'c265';
   if (l.includes('av1')) return 'cav1';
   if (l.includes('vp9')) return 'cvp9';
