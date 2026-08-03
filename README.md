@@ -1,6 +1,6 @@
 # bili2vrchat
 
-> neko 🐱🐈
+> neko 🐱
 
 Web UI to download Bilibili / YouTube videos, optionally transcode for VRChat, and upload to Cloudflare R2 via a Worker presign endpoint.
 
