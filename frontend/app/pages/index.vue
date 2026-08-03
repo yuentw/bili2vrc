@@ -225,7 +225,10 @@ function onResultVideoLoad() {
             </div>
             <div class="field">
               <label>播放速度（上傳前永久變更）</label>
-              <select v-model="app.playbackSpeed">
+              <select
+                :value="app.playbackSpeed"
+                @change="app.playbackSpeed = Number(($event.target as HTMLSelectElement).value)"
+              >
                 <option :value="0.5">0.5x（慢速）</option>
                 <option :value="0.75">0.75x</option>
                 <option :value="1">1.0x（原速）</option>

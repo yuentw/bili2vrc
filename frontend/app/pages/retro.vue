@@ -278,7 +278,12 @@ function copyRetroUrl() {
               <div class="field-row">
                 <div class="field-col">
                   <label class="xp-label" for="playbackSpeed">播放速度（上傳前永久變更）:</label>
-                  <select class="xp-select" id="playbackSpeed" v-model="app.playbackSpeed">
+                  <select
+                    class="xp-select"
+                    id="playbackSpeed"
+                    :value="app.playbackSpeed"
+                    @change="app.playbackSpeed = Number(($event.target as HTMLSelectElement).value)"
+                  >
                     <option :value="0.5">0.5x（慢速）</option>
                     <option :value="0.75">0.75x</option>
                     <option :value="1">1.0x（原速）</option>

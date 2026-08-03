@@ -292,9 +292,9 @@ export function useBili2Vrc() {
           cookieStore.buildRequestBody(url, {
             format_id: selectedFormat.value.format_id,
             key_phrase: keyPhrase.value.trim(),
-            ttl: ttl.value,
-            compat_mode: compatMode.value,
-            playback_speed: playbackSpeed.value,
+            ttl: Number(ttl.value),
+            compat_mode: Boolean(compatMode.value),
+            playback_speed: Number(playbackSpeed.value) || 1,
           }),
         ),
       })

@@ -394,61 +394,53 @@ def clamp_playback_speed(speed: float) -> float:
     return max(PLAYBACK_SPEED_MIN, min(PLAYBACK_SPEED_MAX, speed))
 
 
-def transcode_h264(
-    src: str,
-    dst: str,
-    emit_fn,
-    *,
-    playback_speed: float = 1.0,
-    cancel_event: threading.Event | None = None,
-    register_proc=None,
-) -> bool:
-    """
-    重新編碼為 H.264，可選時間拉伸（setpts + atempo 保留音高）。
-    使用偵測到的最佳硬體編碼器，失敗時由 hwaccel 模組回退 libx264。
-    """
-    speed = clamp_playback_speed(playback_speed)
-    encoder = hwaccel.get_video_encoder()
-
-    step = "stretch" if speed != 1.0 else "reencode"
-    encoder_label = encoder.label
-    if speed != 1.0:
-        emit_msg = f"時間拉伸 {speed}x + H.264 ({encoder_label})..."
-    else:
-        emit_msg = f"重新編碼 H.264 ({encoder_label})..."
-
-    cmd = ["ffmpeg", "-hide_banner", "-i", src]
-
-    if speed != 1.0:
-        video_chain = f"setpts=PTS/{speed}"
-        if encoder.hw_video_filter:
-            video_chain = f"{video_chain},{encoder.hw_video_filter}"
-        filter_graph = (
-            f"[0:v]{video_chain}[v];[0:a]atempo={speed}[a]"
+def _probe_has_audio(filepath: str) -> bool:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=index",
+                "-of", "csv=p=0",
+                filepath,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
         )
-        cmd += [
-            "-filter_complex", filter_graph,
-            "-map", "[v]",
-            "-map", "[a]",
-        ]
-    elif encoder.hw_video_filter:
-        cmd += ["-vf", encoder.hw_video_filter]
+        return result.returncode == 0 and bool(result.stdout.strip())
+    except Exception:
+        return False
 
-    cmd += [
-        "-c:v", encoder.name,
-        *encoder.video_args,
-        "-c:a", "aac",
-        "-b:a", "192k",
-        "-movflags", "+faststart",
-        "-y", dst,
-    ]
 
-    logger.info(
-        "transcode start: encoder=%s speed=%sx src=%s dst=%s",
-        encoder.name, speed, os.path.basename(src), os.path.basename(dst),
-    )
-    logger.debug("ffmpeg command: %s", " ".join(cmd))
+def _build_atempo_filter(speed: float) -> str:
+    """atempo only accepts 0.5–2.0; chain filters for safety."""
+    speed = clamp_playback_speed(speed)
+    parts: list[str] = []
+    remaining = speed
+    while remaining > 2.0 + 1e-9:
+        parts.append("atempo=2.0")
+        remaining /= 2.0
+    while remaining < 0.5 - 1e-9:
+        parts.append("atempo=0.5")
+        remaining /= 0.5
+    parts.append(f"atempo={remaining:.6g}")
+    return ",".join(parts)
 
+
+def _run_ffmpeg_transcode(
+    cmd: list[str],
+    *,
+    step: str,
+    emit_msg: str,
+    emit_fn,
+    cancel_event: threading.Event | None,
+    register_proc,
+) -> tuple[bool, str]:
+    """Run ffmpeg; return (ok, error_tail)."""
+    logger.info("ffmpeg command: %s", " ".join(cmd))
     try:
         proc = subprocess.Popen(
             cmd,
@@ -461,25 +453,140 @@ def transcode_h264(
         if register_proc:
             register_proc(proc)
         time_pat = re.compile(r"time=(\d+:\d+:\d+\.\d+)")
+        tail: list[str] = []
         for line in proc.stdout:
             if cancel_event and cancel_event.is_set():
                 proc.terminate()
-                return False
-            m = time_pat.search(line)
-            if m:
-                emit_fn(step, f"{emit_msg}  已處理 {m.group(1)}")
+                return False, "cancelled"
+            line = line.rstrip()
+            if line:
+                tail.append(line)
+                if len(tail) > 40:
+                    tail = tail[-40:]
+            match = time_pat.search(line)
+            if match:
+                emit_fn(step, f"{emit_msg}  已處理 {match.group(1)}")
         proc.wait()
         if cancel_event and cancel_event.is_set():
-            return False
-        ok = proc.returncode == 0 and os.path.isfile(dst)
-        if ok:
-            logger.info("transcode done: %s", os.path.basename(dst))
-        else:
-            logger.error("transcode failed (exit %s): %s", proc.returncode, os.path.basename(src))
-        return ok
+            return False, "cancelled"
+        if proc.returncode != 0:
+            return False, "\n".join(tail[-15:])
+        return True, ""
     except Exception as exc:
         logger.exception("transcode error: %s", exc)
-        return False
+        return False, str(exc)
+
+
+def transcode_h264(
+    src: str,
+    dst: str,
+    emit_fn,
+    *,
+    playback_speed: float = 1.0,
+    cancel_event: threading.Event | None = None,
+    register_proc=None,
+) -> bool:
+    """
+    重新編碼為 H.264，可選時間拉伸（setpts + atempo 保留音高）。
+    硬體編碼失敗時自動回退 libx264。
+    """
+    speed = clamp_playback_speed(float(playback_speed))
+    has_audio = _probe_has_audio(src)
+    step = "stretch" if abs(speed - 1.0) > 1e-6 else "reencode"
+
+    encoders_to_try = [hwaccel.get_video_encoder()]
+    if encoders_to_try[0].name != "libx264":
+        encoders_to_try.append(hwaccel.software_encoder())
+
+    return _transcode_h264_try(
+        src,
+        dst,
+        emit_fn,
+        speed=speed,
+        has_audio=has_audio,
+        step=step,
+        encoders=encoders_to_try,
+        cancel_event=cancel_event,
+        register_proc=register_proc,
+    )
+
+
+def _transcode_h264_try(
+    src: str,
+    dst: str,
+    emit_fn,
+    *,
+    speed: float,
+    has_audio: bool,
+    step: str,
+    encoders: list,
+    cancel_event: threading.Event | None,
+    register_proc,
+) -> bool:
+    for encoder in encoders:
+        if os.path.isfile(dst):
+            try:
+                os.remove(dst)
+            except OSError:
+                pass
+
+        if abs(speed - 1.0) > 1e-6:
+            emit_msg = f"時間拉伸 {speed}x + H.264 ({encoder.label})..."
+        else:
+            emit_msg = f"重新編碼 H.264 ({encoder.label})..."
+        emit_fn(step, emit_msg)
+
+        cmd = ["ffmpeg", "-hide_banner", "-y", "-i", src]
+
+        if abs(speed - 1.0) > 1e-6:
+            video_chain = f"setpts=PTS/{speed}"
+            if encoder.hw_video_filter:
+                video_chain = f"{video_chain},{encoder.hw_video_filter}"
+            if has_audio:
+                filter_graph = (
+                    f"[0:v]{video_chain}[v];"
+                    f"[0:a:0]{_build_atempo_filter(speed)}[a]"
+                )
+                cmd += ["-filter_complex", filter_graph, "-map", "[v]", "-map", "[a]"]
+            else:
+                cmd += ["-filter:v", video_chain, "-an"]
+        else:
+            if encoder.hw_video_filter:
+                cmd += ["-vf", encoder.hw_video_filter]
+            cmd += ["-map", "0:v:0"]
+            if has_audio:
+                cmd += ["-map", "0:a:0?"]
+            else:
+                cmd += ["-an"]
+
+        cmd += ["-c:v", encoder.name, *encoder.video_args, "-pix_fmt", "yuv420p"]
+        if has_audio:
+            cmd += ["-c:a", "aac", "-b:a", "192k"]
+        cmd += ["-movflags", "+faststart", dst]
+
+        logger.info(
+            "transcode start: encoder=%s speed=%sx audio=%s src=%s",
+            encoder.name, speed, has_audio, os.path.basename(src),
+        )
+        ok, err_tail = _run_ffmpeg_transcode(
+            cmd,
+            step=step,
+            emit_msg=emit_msg,
+            emit_fn=emit_fn,
+            cancel_event=cancel_event,
+            register_proc=register_proc,
+        )
+        if cancel_event and cancel_event.is_set():
+            return False
+        if ok and os.path.isfile(dst) and os.path.getsize(dst) > 0:
+            logger.info("transcode done: %s (%s)", os.path.basename(dst), encoder.name)
+            return True
+        logger.error(
+            "transcode failed with %s (speed=%s): %s",
+            encoder.name, speed, err_tail or "(no output)",
+        )
+
+    return False
 
 
 
@@ -771,10 +878,10 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
 
         # ── Step 2.5: faststart / 重新編碼 / 時間拉伸 ──
         speed = clamp_playback_speed(playback_speed)
-        needs_transcode = compat_mode or speed != 1.0
+        needs_transcode = compat_mode or abs(speed - 1.0) > 1e-6
 
         if needs_transcode:
-            if compat_mode and speed != 1.0:
+            if compat_mode and abs(speed - 1.0) > 1e-6:
                 emit("reencode", f"VRChat 相容模式 + 時間拉伸 {speed}x...")
             elif compat_mode:
                 emit("reencode", "重新編碼為 H.264 VRChat相容模式...")
@@ -798,9 +905,13 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
                 os.remove(output_path)
                 output_path = out_path
                 file_size = os.path.getsize(output_path)
-                done_step = "stretch" if speed != 1.0 and not compat_mode else "reencode"
+                done_step = "stretch" if abs(speed - 1.0) > 1e-6 and not compat_mode else "reencode"
                 emit(done_step, f"處理完成  ({format_size(file_size)})")
             else:
+                if abs(speed - 1.0) > 1e-6:
+                    logger.error("speed stretch failed; abort upload")
+                    emit_error("時間拉伸失敗（未套用倍速）。請重試，或先開 VRChat 相容模式再試")
+                    return
                 fail_msg = "⚠ 處理失敗，使用原始檔案上傳"
                 logger.warning("transcode fallback to original: %s", output_path)
                 emit("reencode" if compat_mode else "stretch", fail_msg)
@@ -907,7 +1018,7 @@ def process():
     key_phrase = data.get("key_phrase", "")
     ttl        = int(data.get("ttl", config.DEFAULT_TTL))
     compat_mode = bool(data.get("compat_mode", False))
-    playback_speed = clamp_playback_speed(float(data.get("playback_speed", 1.0)))
+    playback_speed = clamp_playback_speed(float(data.get("playback_speed", 1) or 1))
     cookie_content = (data.get("cookie_content") or "").strip() or None
 
     if not url or not format_id:

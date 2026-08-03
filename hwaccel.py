@@ -166,6 +166,10 @@ def detect_video_encoder() -> VideoEncoder:
     return _make_encoder("libx264", fallback=True)
 
 
+def software_encoder() -> VideoEncoder:
+    return _make_encoder("libx264", fallback=True)
+
+
 @lru_cache(maxsize=1)
 def get_video_encoder() -> VideoEncoder:
     return detect_video_encoder()
