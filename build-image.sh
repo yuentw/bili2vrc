@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-IMAGE_NAME="${IMAGE_NAME:-bili2vrchat}"
+IMAGE_NAME="${IMAGE_NAME:-mio9/bili2vrchat}"
 IMAGE_TAG="${IMAGE_TAG:-${1:-latest}}"
 IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
 
