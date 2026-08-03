@@ -27,9 +27,24 @@ Browser → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
 | Python 3.10+ | Yes | 3.14 tested |
 | [ffmpeg](https://ffmpeg.org/) | Yes | `ffmpeg` and `ffprobe` on `PATH` |
 | [Node.js](https://nodejs.org/) | Yes for YouTube | yt-dlp (`--js-runtimes node`) |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Yes | via `requirements.txt` |
+| [Bun](https://bun.sh/) | Yes (frontend) | Nuxt UI build; `start.bat` / `start.sh` install into project `.bun` if missing |
 | Cloudflare R2 bucket | Yes | see [R2 setup](#cloudflare-r2-setup) below |
 | [aria2](https://github.com/aria2/aria2) | Optional | faster Bilibili downloads; **not bundled** — install yourself (see below); **not used for YouTube** |
+
+### Python packages (`requirements.txt`)
+
+| Package | Role |
+|---------|------|
+| flask | Web UI / API |
+| requests | HTTP helpers |
+| boto3 | Cloudflare R2 (S3-compatible) upload |
+| yt-dlp | Bilibili / YouTube download |
+
+### Frontend (`frontend/`)
+
+| Package | Role |
+|---------|------|
+| Nuxt 4 / Vue 3 | Static UI (`bun run generate` → `frontend/.output/public`) |
 
 ---
 
@@ -120,10 +135,17 @@ export R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 
 ## Install & run
 
+`start.bat` / `start.sh` will:
+
+1. Use system `bun`, or project `.bun`, or install Bun into `.bun`
+2. Run `bun install` + `bun run generate` in `frontend/`
+3. Install Python deps from `requirements.txt` (Windows) / use existing venv (Unix)
+4. Start `app.py`
+
 ### Windows
 
 1. Install **Python 3**, **ffmpeg** (`ffmpeg -version`), **Node.js** (`node -version`)
-2. Optional: for faster Bilibili downloads, install aria2 yourself — on Windows, download `aria2c.exe` from [aria2 releases](https://github.com/aria2/aria2/releases) and place it in the project root; on Unix, install via package manager (see below). Not bundled with this project.
+2. Optional: for faster Bilibili downloads, download `aria2c.exe` from [aria2 releases](https://github.com/aria2/aria2/releases) and place it in the project root (not bundled)
 3. Configure R2 (see above)
 4. Run:
 
@@ -134,6 +156,10 @@ start.bat
 Or manually:
 
 ```bat
+cd frontend
+bun install
+bun run generate
+cd ..
 python -m pip install -r requirements.txt
 python app.py
 ```
@@ -146,12 +172,14 @@ python app.py
 
 ```bash
 # macOS
-brew install ffmpeg node aria2
+brew install ffmpeg node curl
 
-# Debian / Ubuntu
+# Debian / Ubuntu (unzip required if Bun installer runs)
 sudo apt update
-sudo apt install -y ffmpeg nodejs aria2 python3 python3-pip python3-venv
+sudo apt install -y ffmpeg nodejs python3 python3-pip python3-venv curl unzip
 ```
+
+Optional aria2: `brew install aria2` or `sudo apt install -y aria2`.
 
 **venv (recommended):**
 
@@ -167,6 +195,13 @@ python3 -m pip install -r requirements.txt
 ```bash
 chmod +x start.sh   # first time only
 ./start.sh
+```
+
+Or manually:
+
+```bash
+cd frontend && bun install && bun run generate && cd ..
+python3 app.py
 ```
 
 Open [http://localhost:5000](http://localhost:5000). On LAN: `http://<host-ip>:5000` (bind `0.0.0.0` by default).
@@ -187,7 +222,7 @@ docker run --rm -p 5000:5000 \
   bili2vrchat
 ```
 
-Image includes `ffmpeg`, `aria2`, and `nodejs`. Pass R2 credentials via `-e` (do not bake secrets into the image).
+Image builds the Nuxt frontend with Bun, and includes `ffmpeg`, `aria2`, and `nodejs`. Pass R2 credentials via `-e` (do not bake secrets into the image).
 
 ---
 
@@ -233,6 +268,7 @@ A **background thread** in this app scans the bucket every `R2_CLEANUP_INTERVAL`
 | `DEFAULT_TTL` | `604800` | Default retention if UI omits TTL (7 days) |
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `5000` | HTTP port |
+| `FRONTEND_DIST` | `frontend/.output/public` | Nuxt static output directory |
 | `HW_ENCODER` | `auto` | `auto`, `libx264`, `h264_videotoolbox`, etc. |
 | `LOG_LEVEL` | `INFO` | Python log level |
 | `DISABLE_ARIA2C` | off | `1` / `true` to disable aria2c |
@@ -254,10 +290,11 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | `config.py` | Settings (R2 credentials, TTL, server) |
 | `r2.py` | R2 upload, public URL builder, expiry cleanup |
 | `hwaccel.py` | Hardware encoder detection |
-| `static/cookies.js` | Client-side cookie helpers |
-| `templates/index.html` | Main UI |
-| `templates/index_pixel.html` | Retro UI (`/retro`) |
-| `start.sh` / `start.bat` | Launch scripts |
+| `frontend/` | Nuxt 4 UI (`bun run generate`) |
+| `frontend/.output/public` | Built static files served by Flask |
+| `requirements.txt` | Python deps (Flask, requests, boto3, yt-dlp) |
+| `start.sh` / `start.bat` | Ensure bun + frontend build, then launch |
+| `.bun/` | Optional local Bun install (gitignored) |
 | `temp/` | Download/transcode scratch (gitignored) |
 
 ---
@@ -270,6 +307,8 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | Upload fails (403 / signature) | Rotate API token; verify bucket name and permissions |
 | No HTTP URL after upload | Set `R2_PUBLIC_BASE_URL` and enable bucket public access |
 | YouTube fetch fails | Install Node.js; run `node -version` |
+| Frontend missing / blank UI | Run `cd frontend && bun install && bun run generate` (or use `start.bat` / `start.sh`) |
+| `bun` install fails | Check network; on Linux install `curl` + `unzip`; or install Bun from [bun.sh](https://bun.sh/) |
 | Bilibili slow | Add `aria2c.exe` to project root (Windows) or install aria2 to `PATH` |
 | Expired files still in bucket | App must be running for cleanup; or wait until next scan interval |
 | VRChat won’t play / can’t seek | Enable **VRChat compat mode**; ensure `R2_PUBLIC_BASE_URL` is set |

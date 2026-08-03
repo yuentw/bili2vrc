@@ -26,10 +26,25 @@
 |------|----------|------|
 | Python 3.10+ | 是 | 已在 3.14 上測試 |
 | [ffmpeg](https://ffmpeg.org/) | 是 | `ffmpeg`、`ffprobe` 需在 `PATH` |
-| [Node.js](https://nodejs.org/) | YouTube 必需 | 供 yt-dlp 使用 |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 是 | 透過 `requirements.txt` 安裝 |
+| [Node.js](https://nodejs.org/) | YouTube 必需 | 供 yt-dlp 使用（`--js-runtimes node`） |
+| [Bun](https://bun.sh/) | 是（前端） | Nuxt UI 建置；`start.bat` / `start.sh` 若未偵測到會安裝到專案 `.bun` |
 | Cloudflare R2 儲存桶 | 是 | 見下方 [R2 設定教學](#cloudflare-r2-設定教學) |
 | [aria2](https://github.com/aria2/aria2) | 可選 | 加速 Bilibili 下載；**本專案不附帶**，需自行安裝（見下方）；**不用於 YouTube** |
+
+### Python 套件（`requirements.txt`）
+
+| 套件 | 用途 |
+|------|------|
+| flask | Web UI／API |
+| requests | HTTP |
+| boto3 | Cloudflare R2（S3 相容）上傳 |
+| yt-dlp | Bilibili／YouTube 下載 |
+
+### 前端（`frontend/`）
+
+| 套件 | 用途 |
+|------|------|
+| Nuxt 4／Vue 3 | 靜態 UI（`bun run generate` → `frontend/.output/public`） |
 
 ---
 
@@ -120,10 +135,17 @@ export R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 
 ## 安裝與啟動
 
+`start.bat`／`start.sh` 會自動：
+
+1. 使用系統 `bun`、專案 `.bun`，或安裝 Bun 到 `.bun`
+2. 在 `frontend/` 執行 `bun install` + `bun run generate`
+3. 安裝 Python 依賴（Windows）／使用既有 venv（Unix）
+4. 啟動 `app.py`
+
 ### Windows
 
 1. 安裝 **Python 3**、**ffmpeg**（`ffmpeg -version`）、**Node.js**（`node -version`）
-2. 可選：若要加速 Bilibili，請自行安裝 aria2 — Windows 可從 [aria2 releases](https://github.com/aria2/aria2/releases) 下載 `aria2c.exe` 放在專案根目錄；Unix 請用套件管理器安裝（見下方）。本專案不附帶 aria2。
+2. 可選：若要加速 Bilibili，從 [aria2 releases](https://github.com/aria2/aria2/releases) 下載 `aria2c.exe` 放在專案根目錄（本專案不附帶）
 3. 完成上方 R2 設定
 4. 執行：
 
@@ -134,6 +156,10 @@ start.bat
 或手動：
 
 ```bat
+cd frontend
+bun install
+bun run generate
+cd ..
 python -m pip install -r requirements.txt
 python app.py
 ```
@@ -146,12 +172,14 @@ python app.py
 
 ```bash
 # macOS
-brew install ffmpeg node aria2
+brew install ffmpeg node curl
 
-# Debian / Ubuntu
+# Debian / Ubuntu（若需自動安裝 Bun，請一併安裝 unzip）
 sudo apt update
-sudo apt install -y ffmpeg nodejs aria2 python3 python3-pip python3-venv
+sudo apt install -y ffmpeg nodejs python3 python3-pip python3-venv curl unzip
 ```
+
+可選 aria2：`brew install aria2` 或 `sudo apt install -y aria2`。
 
 **建議使用 venv：**
 
@@ -167,6 +195,13 @@ python3 -m pip install -r requirements.txt
 ```bash
 chmod +x start.sh   # 僅首次
 ./start.sh
+```
+
+或手動：
+
+```bash
+cd frontend && bun install && bun run generate && cd ..
+python3 app.py
 ```
 
 瀏覽器開啟 [http://localhost:5000](http://localhost:5000)。同一區域網路可用 `http://<主機IP>:5000`。
@@ -187,7 +222,7 @@ docker run --rm -p 5000:5000 \
   bili2vrchat
 ```
 
-映像檔已含 `ffmpeg`、`aria2`、`nodejs`。R2 憑證請用 `-e` 傳入，不要寫進映像檔。
+映像檔以 Bun 建置 Nuxt 前端，並含 `ffmpeg`、`aria2`、`nodejs`。R2 憑證請用 `-e` 傳入，不要寫進映像檔。
 
 ---
 
@@ -233,6 +268,7 @@ docker run --rm -p 5000:5000 \
 | `DEFAULT_TTL` | `604800` | UI 未指定時預設 7 天 |
 | `HOST` | `0.0.0.0` | 綁定位址 |
 | `PORT` | `5000` | HTTP 連接埠 |
+| `FRONTEND_DIST` | `frontend/.output/public` | Nuxt 靜態輸出目錄 |
 | `HW_ENCODER` | `auto` | `auto`、`libx264`、`h264_videotoolbox` 等 |
 | `LOG_LEVEL` | `INFO` | 日誌級別 |
 | `DISABLE_ARIA2C` | 關閉 | `1` / `true` 停用 aria2c |
@@ -254,10 +290,11 @@ docker run --rm -p 5000:5000 \
 | `config.py` | 設定（R2 憑證、TTL、伺服器） |
 | `r2.py` | R2 上傳、公開網址、過期清理 |
 | `hwaccel.py` | 硬體編碼器偵測 |
-| `static/cookies.js` | 客戶端 Cookie 輔助 |
-| `templates/index.html` | 主介面 |
-| `templates/index_pixel.html` | 復古介面（`/retro`） |
-| `start.sh` / `start.bat` | 啟動腳本 |
+| `frontend/` | Nuxt 4 UI（`bun run generate`） |
+| `frontend/.output/public` | 建置後靜態檔，由 Flask 提供 |
+| `requirements.txt` | Python 依賴（Flask、requests、boto3、yt-dlp） |
+| `start.sh` / `start.bat` | 確保 bun＋前端建置後啟動 |
+| `.bun/` | 可選的本機 Bun 安裝（gitignore） |
 | `temp/` | 下載／轉碼暫存（gitignore） |
 
 ---
@@ -270,6 +307,8 @@ docker run --rm -p 5000:5000 \
 | 上傳失敗（403／簽章錯誤） | 重建 API Token；確認 bucket 名稱與權限 |
 | 完成後沒有 HTTP 網址 | 設定 `R2_PUBLIC_BASE_URL` 並開啟 bucket 公開存取 |
 | YouTube 獲取格式失敗 | 安裝 Node.js，確認 `node -version` |
+| 前端空白／找不到頁面 | 執行 `cd frontend && bun install && bun run generate`（或用 `start.bat`／`start.sh`） |
+| `bun` 安裝失敗 | 檢查網路；Linux 需 `curl`＋`unzip`；或至 [bun.sh](https://bun.sh/) 自行安裝 |
 | Bilibili 很慢 | Windows：將 `aria2c.exe` 放在專案根目錄；或安裝 aria2 至 `PATH` |
 | 過期檔案仍在 bucket | 程式需持續運行才會清理；或等下一個掃描週期 |
 | VRChat 無法播放／不能 seek | 開啟 **VRChat 相容模式**；確認已設 `R2_PUBLIC_BASE_URL` |
