@@ -4,7 +4,7 @@
 
 [English](README.md) | **繁體中文**
 
-用於下載 Bilibili / YouTube 影片、可選轉碼以適配 VRChat，並透過 **R2 S3 API** 上傳至**你自己的 Cloudflare R2 儲存桶**。**不需要**部署 Cloudflare Worker。
+用於下載 **Bilibili / YouTube** 影片，並透過 **R2 S3 API** 上傳至**你自己的 Cloudflare R2 儲存桶**。產生**直連網址**，可在 **VRChat** 觀看，並支援**影片倍速**調節。**不需要**部署 Cloudflare Worker。
 
 ```
 瀏覽器 → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat 直連

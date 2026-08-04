@@ -4,7 +4,7 @@
 
 **English** | [繁體中文](README_zh-TW.md)
 
-Web UI to download Bilibili / YouTube videos, optionally transcode for VRChat, and upload to **your own Cloudflare R2 bucket** via the S3 API. No Cloudflare Worker required.
+Web UI to download **Bilibili / YouTube** videos and upload them to **your own Cloudflare R2 bucket** via the **R2 S3 API**. Produces a **direct URL for watching in VRChat**, with optional **playback speed** adjustment. No Cloudflare Worker required.
 
 ```
 Browser → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
