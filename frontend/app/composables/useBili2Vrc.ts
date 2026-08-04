@@ -81,8 +81,16 @@ export function useBili2Vrc() {
     try {
       const response = await fetch('/api/hwaccel-status')
       const data = await response.json()
-      const suffix = data.fallback ? ' (軟體)' : ''
-      hwEncoderLabel.value = `編碼器：${data.label}${suffix}`
+      const note = typeof data.note === 'string' && data.note ? ` — ${data.note}` : ''
+      if (data.fallback) {
+        hwEncoderLabel.value = `編碼器：${data.label}${note}`
+      } else {
+        const decode = Array.isArray(data.decode_hwaccel)
+          ? data.decode_hwaccel.filter((part: string) => part !== '-hwaccel').join('/')
+          : ''
+        const decodeHint = decode ? ` · 解碼 ${decode}` : ''
+        hwEncoderLabel.value = `編碼器：${data.label}${decodeHint}${note}`
+      }
     } catch {
       hwEncoderLabel.value = '編碼器：未知'
     }
