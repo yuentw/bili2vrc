@@ -235,10 +235,14 @@ docker run --rm -p 5000:5000 \
 
 可選油猴腳本：滑鼠移到 B 站影片封面上出現 **下載解析** → 開啟 bili2vrc，自動填入 `?url=` 並執行 **獲取格式**，再手動選解析度。
 
+**[一鍵安裝 bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** — 會開啟 Tampermonkey 安裝頁（需先安裝 [Tampermonkey](https://www.tampermonkey.net/)）。
+
 1. 安裝 [Tampermonkey](https://www.tampermonkey.net/)
-2. 新增腳本，貼上或匯入 [userscripts/bili2vrc-bridge.user.js](userscripts/bili2vrc-bridge.user.js)
+2. 點 **[一鍵安裝 bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)**，確認安裝
 3. 先啟動 bili2vrc（`start.bat`／`start.sh`）
 4. 在 B 站將滑鼠移到影片封面，點 **下載解析**
+
+原始檔：[userscripts/bili2vrc-bridge.user.js](userscripts/bili2vrc-bridge.user.js)
 
 預設跳轉：`http://localhost:5000`。可在油猴選單 → **設定 bili2vrc 網址** 修改。
 

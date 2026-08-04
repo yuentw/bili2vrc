@@ -235,10 +235,14 @@ Image builds the Nuxt frontend with Bun, and includes `ffmpeg`, `aria2`, and `no
 
 Optional userscript: hover a Bilibili video cover → **下載解析** → opens bili2vrc with `?url=` filled and **Fetch formats** started so you can pick a resolution.
 
+**[Install bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** — opens the Tampermonkey install page (requires [Tampermonkey](https://www.tampermonkey.net/) first).
+
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
-2. Create a new script and paste [userscripts/bili2vrc-bridge.user.js](userscripts/bili2vrc-bridge.user.js) (or open that file in the browser via Tampermonkey → Utilities → Install from file / URL)
+2. Click **[Install bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** and confirm install
 3. Start bili2vrc (`start.bat` / `start.sh`)
 4. On Bilibili, hover a video card and click **下載解析**
+
+Source: [userscripts/bili2vrc-bridge.user.js](userscripts/bili2vrc-bridge.user.js)
 
 Default target: `http://localhost:5000`. Change via Tampermonkey menu → **設定 bili2vrc 網址**.
 
