@@ -18,6 +18,12 @@ if not exist "%~dp0frontend\.output\public\index.html" (
   )
 )
 
+echo [bili2vrchat] Building frontend ...
+cd frontend
+bun install
+bun run generate
+cd ..
+
 echo [bili2vrchat] Starting server ...
 uv run app.py
 echo.
