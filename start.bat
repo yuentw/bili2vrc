@@ -13,6 +13,12 @@ if errorlevel 1 goto :end_error
 call :ensure_frontend
 if errorlevel 1 goto :end_error
 
+echo [bili2vrchat] Building frontend ...
+cd frontend
+bun install
+bun run generate
+cd ..
+
 echo [bili2vrchat] Starting server ...
 uv run app.py
 echo.
