@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bili2vrc Bridge
 // @namespace    https://github.com/yuentw/bili2vrc
-// @version      1.0.3
+// @version      1.0.5
 // @description  Bilibili 封面懸浮「下載解析」→ 開啟 bili2vrc 並自動填入網址、獲取格式
 // @author       bili2vrc
 // @match        https://www.bilibili.com/*
@@ -29,11 +29,28 @@
     '.video-card .pic-box',
     '.bili-video-card .bili-video-card__image',
     '.bili-video-card__image--wrap',
+    '.bili-video-card__cover',
+    '.bili-cover-card',
+    '.bili-cover-card__thumbnail',
     '.small-item .cover',
     '.card-pic',
     '.cover-container',
     '.list-item .cover',
     '.bili-dyn-card-video__cover',
+    // Watch page — right-rail related / next-play
+    '.video-page-card-small .pic-box',
+    '.video-page-card-small .card-box .pic-box',
+    '.video-page-operator-card-small .pic-box',
+    '.next-play .pic-box',
+    '.recommend-list-v1 .pic-box',
+    '.recommend-list-container .pic-box',
+    '#reco_list .pic-box',
+    '.right-container .pic-box',
+    // History — www.bilibili.com/history
+    '.history-card .bili-video-card__cover',
+    '.history-card .bili-cover-card',
+    '.history-card .bili-cover-card__thumbnail',
+    '.section-cards .bili-cover-card',
     // Favorites — new UI (space.bilibili.com/*/favlist)
     '.fav-list-main .bili-video-card__image',
     '.fav-list-main .bili-video-card__image--wrap',
@@ -56,10 +73,39 @@
   const FAV_COVER_INNER = [
     '.bili-video-card__image',
     '.bili-video-card__image--wrap',
+    '.bili-video-card__cover',
     '.bili-cover-card',
     'a.cover',
     '.cover',
     '.pic-box',
+  ].join(', ');
+
+  const HISTORY_ITEM_SELECTORS = [
+    '.history-card',
+    '.section-cards .history-card',
+  ];
+
+  const HISTORY_COVER_INNER = [
+    '.bili-video-card__cover',
+    '.bili-cover-card',
+    '.bili-cover-card__thumbnail',
+  ].join(', ');
+
+  const RELATED_ITEM_SELECTORS = [
+    '.video-page-card-small',
+    '.video-page-operator-card-small',
+    '.next-play',
+    '#reco_list .video-page-card-small',
+    '.recommend-list-v1 .video-page-card-small',
+    '.recommend-list-container .video-page-card-small',
+    '.right-container .video-page-card-small',
+  ];
+
+  const RELATED_COVER_INNER = [
+    '.pic-box',
+    '.card-box .pic-box',
+    'a.pic-box',
+    '.cover',
   ].join(', ');
 
   const TITLE_OR_INFO_SELECTOR = [
@@ -119,7 +165,19 @@
     if (fromHost) return fromHost;
 
     const card = element.closest?.(
-      '.bili-video-card, .video-card, .small-item, .bili-dyn-card-video, [data-bvid], .items__item, .fav-video-list li',
+      [
+        '.bili-video-card',
+        '.video-card',
+        '.video-page-card-small',
+        '.video-page-operator-card-small',
+        '.next-play',
+        '.history-card',
+        '.small-item',
+        '.bili-dyn-card-video',
+        '[data-bvid]',
+        '.items__item',
+        '.fav-video-list li',
+      ].join(', '),
     );
     if (card) {
       const dataBvid =
@@ -131,12 +189,14 @@
       );
       const nestedBvid = extractBvid(nested?.href || nested?.getAttribute('href') || '');
       if (nestedBvid) return nestedBvid;
-      // Favlist sometimes puts BV only in title link
+      // Favlist / related rail sometimes put BV only in title link
       const titleLink = card.querySelector(
-        '.bili-video-card__title a[href], .title a[href], a.title[href]',
+        '.bili-video-card__title a[href], .title a[href], a.title[href], .info a[href]',
       );
       const titleBvid = extractBvid(titleLink?.href || titleLink?.getAttribute('href') || '');
       if (titleBvid) return titleBvid;
+      const fromCardHtml = extractBvid(card.innerHTML || '');
+      if (fromCardHtml) return fromCardHtml;
     }
     return null;
   }
@@ -149,8 +209,8 @@
     }
     if (element.matches(COVER_SELECTORS.join(', '))) return true;
     const className = String(element.className || '');
-    if (/pic-box|__image|card-pic|cover-container|dyn-card-video__cover|bili-cover-card|(^|\s)cover(\s|$)/i.test(className)) {
-      return Boolean(element.querySelector('img') || element.matches('img') || element.querySelector('picture'));
+    if (/pic-box|__image|__cover|card-pic|cover-container|dyn-card-video__cover|bili-cover-card|(^|\s)cover(\s|$)/i.test(className)) {
+      return Boolean(element.querySelector('img') || element.matches('img') || element.querySelector('picture') || element.matches('a'));
     }
     return false;
   }
@@ -166,6 +226,8 @@
     if (!(host instanceof Element)) return;
     if (!isCoverHost(host)) return;
     if (host.querySelector(`:scope > .${BTN_CLASS}`)) return;
+    // Avoid nested buttons on cover > a.bili-cover-card > thumbnail
+    if (host.parentElement?.closest(`[${HOST_ATTR}]`)) return;
 
     const bvid = findBvidNear(host);
     if (!bvid) return;
@@ -203,12 +265,34 @@
     });
   }
 
+  function scanHistoryCovers(root = document) {
+    HISTORY_ITEM_SELECTORS.forEach((itemSel) => {
+      root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        const cover =
+          item.querySelector('.bili-cover-card') ||
+          item.querySelector(HISTORY_COVER_INNER);
+        if (cover) attachCoverButton(cover);
+      });
+    });
+  }
+
+  function scanRelatedCovers(root = document) {
+    RELATED_ITEM_SELECTORS.forEach((itemSel) => {
+      root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        const cover = item.querySelector(RELATED_COVER_INNER);
+        if (cover) attachCoverButton(cover);
+      });
+    });
+  }
+
   function scanCovers(root = document) {
     removeStrayButtons();
     COVER_SELECTORS.forEach((selector) => {
       root.querySelectorAll?.(selector)?.forEach((el) => attachCoverButton(el));
     });
     scanFavlistCovers(root);
+    scanHistoryCovers(root);
+    scanRelatedCovers(root);
   }
 
   function ensureWatchPageButton() {
@@ -269,10 +353,17 @@
       a:hover > .${BTN_CLASS},
       .video-card:hover .${BTN_CLASS},
       .bili-video-card:hover .${BTN_CLASS},
+      .video-page-card-small:hover .${BTN_CLASS},
+      .video-page-operator-card-small:hover .${BTN_CLASS},
+      .next-play:hover .${BTN_CLASS},
+      .history-card:hover .${BTN_CLASS},
+      .bili-cover-card:hover .${BTN_CLASS},
+      .bili-video-card__cover:hover .${BTN_CLASS},
       .items__item:hover .${BTN_CLASS},
       .fav-video-list li:hover .${BTN_CLASS},
       .fav-list-main .items__item:hover .${BTN_CLASS},
-      [class*="cover"]:hover .${BTN_CLASS} {
+      [class*="cover"]:hover .${BTN_CLASS},
+      .pic-box:hover .${BTN_CLASS} {
         opacity: 1 !important;
       }
       .${BTN_CLASS}:hover {
