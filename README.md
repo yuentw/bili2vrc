@@ -1,4 +1,4 @@
-# bili2vrchat
+# bili2vrc
 
 > neko 🐱
 

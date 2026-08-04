@@ -3,8 +3,8 @@ hwaccel.py — ffmpeg H.264 硬體編碼器偵測與參數預設
 """
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import os
 import re
 import subprocess

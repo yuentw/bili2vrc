@@ -1,4 +1,4 @@
-FROM oven/bun:1-bookworm-slim AS frontend-build
+FROM oven/bun:1.3.14-slim AS frontend-build
 WORKDIR /frontend
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile
@@ -6,6 +6,8 @@ COPY frontend/ ./
 RUN bun run generate
 
 FROM python:3.14-slim-bookworm
+
+COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -16,8 +18,13 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY src/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV UV_SYSTEM_PYTHON=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -r requirements.txt
 
 COPY app.py ./
 COPY src/ ./src/

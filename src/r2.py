@@ -2,7 +2,7 @@
 import logging
 import secrets
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import boto3
 from botocore.exceptions import ClientError
