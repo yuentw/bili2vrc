@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bili2vrc Bridge
 // @namespace    https://github.com/yuentw/bili2vrc
-// @version      1.0.0
+// @version      1.0.1
 // @description  Bilibili 封面懸浮「下載解析」→ 開啟 bili2vrc 並自動填入網址、獲取格式
 // @author       bili2vrc
 // @match        https://www.bilibili.com/*
@@ -24,16 +24,27 @@
   const FIXED_ID = 'b2v-fixed-btn';
   const HOST_ATTR = 'data-b2v-host';
 
+  // Only thumbnail/cover containers — never title/info text links
   const COVER_SELECTORS = [
     '.video-card .pic-box',
     '.bili-video-card .bili-video-card__image',
+    '.bili-video-card__image--wrap',
     '.small-item .cover',
     '.card-pic',
-    'a[href*="/video/BV"]',
     '.cover-container',
     '.list-item .cover',
     '.bili-dyn-card-video__cover',
   ];
+
+  const TITLE_OR_INFO_SELECTOR = [
+    '.bili-video-card__info',
+    '.bili-video-card__info--right',
+    '.bili-video-card__info--tit',
+    '.video-card__info',
+    '.info',
+    '.title',
+    '.up-info',
+  ].join(', ');
 
   function getBaseUrl() {
     const saved = (typeof GM_getValue === 'function' ? GM_getValue(STORAGE_KEY, '') : '') || '';
@@ -94,6 +105,20 @@
     return null;
   }
 
+  function isCoverHost(element) {
+    if (!(element instanceof Element)) return false;
+    // Never attach on title / stats / uploader text areas
+    if (element.closest(TITLE_OR_INFO_SELECTOR) && !element.matches(COVER_SELECTORS.join(', '))) {
+      return false;
+    }
+    if (element.matches(COVER_SELECTORS.join(', '))) return true;
+    const className = String(element.className || '');
+    if (/pic-box|__image|card-pic|cover-container|dyn-card-video__cover|(^|\s)cover(\s|$)/i.test(className)) {
+      return Boolean(element.querySelector('img'));
+    }
+    return false;
+  }
+
   function ensureHostPosition(host) {
     if (window.getComputedStyle(host).position === 'static') {
       host.style.position = 'relative';
@@ -103,7 +128,8 @@
 
   function attachCoverButton(host) {
     if (!(host instanceof Element)) return;
-    if (host.querySelector(`.${BTN_CLASS}`)) return;
+    if (!isCoverHost(host)) return;
+    if (host.querySelector(`:scope > .${BTN_CLASS}`)) return;
 
     const bvid = findBvidNear(host);
     if (!bvid) return;
@@ -123,7 +149,17 @@
     host.appendChild(btn);
   }
 
+  function removeStrayButtons() {
+    document.querySelectorAll(`.${BTN_CLASS}`).forEach((btn) => {
+      const host = btn.parentElement;
+      if (!host || !isCoverHost(host)) {
+        btn.remove();
+      }
+    });
+  }
+
   function scanCovers(root = document) {
+    removeStrayButtons();
     COVER_SELECTORS.forEach((selector) => {
       root.querySelectorAll?.(selector)?.forEach((el) => attachCoverButton(el));
     });
