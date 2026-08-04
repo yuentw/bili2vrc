@@ -31,7 +31,7 @@ if errorlevel 1 goto :fail_bun_generate
 popd
 
 echo [bili2vrchat] Installing Python deps ...
-python -m pip install -r requirements.txt -q
+python -m pip install -r src/requirements.txt -q
 if errorlevel 1 goto :fail_pip
 
 echo [bili2vrchat] Starting server ...

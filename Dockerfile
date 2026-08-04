@@ -16,10 +16,11 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY src/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py config.py hwaccel.py r2.py ./
+COPY app.py ./
+COPY src/ ./src/
 COPY --from=frontend-build /frontend/.output/public ./frontend/.output/public
 COPY cookies/README.md cookies/
 
