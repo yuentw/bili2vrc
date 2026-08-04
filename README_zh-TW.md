@@ -231,6 +231,21 @@ docker run --rm -p 5000:5000 \
 
 ---
 
+## Tampermonkey：B 站 → bili2vrc
+
+可選油猴腳本：滑鼠移到 B 站影片封面上出現 **下載解析** → 開啟 bili2vrc，自動填入 `?url=` 並執行 **獲取格式**，再手動選解析度。
+
+1. 安裝 [Tampermonkey](https://www.tampermonkey.net/)
+2. 新增腳本，貼上或匯入 [userscripts/bili2vrc-bridge.user.js](userscripts/bili2vrc-bridge.user.js)
+3. 先啟動 bili2vrc（`start.bat`／`start.sh`）
+4. 在 B 站將滑鼠移到影片封面，點 **下載解析**
+
+預設跳轉：`http://localhost:5000`。可在油猴選單 → **設定 bili2vrc 網址** 修改。
+
+深連結格式：`http://localhost:5000/?url=<編碼後的 B 站影片網址>`
+
+---
+
 ## 使用教學
 
 1. **貼上網址** — Bilibili 或 YouTube 連結 → 點 **獲取格式**
@@ -299,6 +314,7 @@ docker run --rm -p 5000:5000 \
 | `frontend/.output/public` | 建置後靜態檔，由 Flask 提供 |
 | `requirements.txt` | Python 依賴（Flask、requests、boto3、yt-dlp） |
 | `start.sh` / `start.bat` | 確保 bun＋前端建置後啟動 |
+| `userscripts/bili2vrc-bridge.user.js` | 可選油猴腳本（B 站 → bili2vrc） |
 | `.bun/` | 可選的本機 Bun 安裝（gitignore） |
 | `temp/` | 下載／轉碼暫存（gitignore） |
 
