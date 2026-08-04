@@ -77,9 +77,14 @@ You only need an **R2 bucket** and an **API token**. No Worker deployment.
 
 R2 is private by default. To get an HTTP URL for VRChat:
 
-1. Open your bucket → **Settings**
-2. Enable **Public access** / **R2.dev subdomain** (or connect a custom domain)
-3. Copy the public base URL, e.g. `https://pub-xxxxxxxx.r2.dev` → `R2_PUBLIC_BASE_URL`
+1. Cloudflare Dashboard → **R2 Object Storage** → open your **bucket**
+2. Open **Settings**
+3. Under **Custom Domains**, click **Add** and connect a domain (e.g. `b2v.example.com`)
+4. Wait until **Status** is **Active** and **Access** is **Enabled**
+5. Set `R2_PUBLIC_BASE_URL` to that domain, e.g. `https://b2v.example.com`  
+   (scheme optional — the app adds `https://` if missing)
+
+Alternatively you can enable **Public Development URL** (`https://pub-xxxxxxxx.r2.dev`) on the same Settings page and use that as `R2_PUBLIC_BASE_URL`.
 
 Without `R2_PUBLIC_BASE_URL`, uploads still work; the app returns `r2://bucket/key` instead of an HTTP link.
 
@@ -305,7 +310,7 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 |-------|--------|
 | `請設定 R2 環境變數` / R2 not configured | Fill `config.py` or set env vars; avoid leaving `Fill in …` placeholders |
 | Upload fails (403 / signature) | Rotate API token; verify bucket name and permissions |
-| No HTTP URL after upload | Set `R2_PUBLIC_BASE_URL` and enable bucket public access |
+| No HTTP URL after upload | Set `R2_PUBLIC_BASE_URL`; enable bucket **Settings → Custom Domains** (or Public Development URL) |
 | YouTube fetch fails | Install Node.js; run `node -version` |
 | Frontend missing / blank UI | Run `cd frontend && bun install && bun run generate` (or use `start.bat` / `start.sh`) |
 | `bun` install fails | Check network; on Linux install `curl` + `unzip`; or install Bun from [bun.sh](https://bun.sh/) |
