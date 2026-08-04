@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bili2vrc Bridge
 // @namespace    https://github.com/yuentw/bili2vrc
-// @version      1.0.1
+// @version      1.0.2
 // @description  Bilibili 封面懸浮「下載解析」→ 開啟 bili2vrc 並自動填入網址、獲取格式
 // @author       bili2vrc
 // @match        https://www.bilibili.com/*
@@ -198,21 +198,25 @@
     GM_addStyle(`
       .${BTN_CLASS} {
         position: absolute !important;
-        left: 8px !important;
-        bottom: 8px !important;
+        top: 8px !important;
+        right: 8px !important;
+        left: auto !important;
+        bottom: auto !important;
         z-index: 30 !important;
-        padding: 6px 10px !important;
+        padding: 10px 16px !important;
+        min-width: 88px !important;
         border: none !important;
-        border-radius: 6px !important;
-        background: rgba(78, 142, 247, 0.92) !important;
+        border-radius: 8px !important;
+        background: rgba(236, 72, 153, 0.95) !important;
         color: #fff !important;
-        font-size: 12px !important;
-        font-weight: 600 !important;
+        font-size: 15px !important;
+        font-weight: 700 !important;
         line-height: 1.2 !important;
+        letter-spacing: 0.02em !important;
         cursor: pointer !important;
         opacity: 0 !important;
         pointer-events: auto !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4) !important;
         transition: opacity 0.15s ease, transform 0.15s ease !important;
       }
       [${HOST_ATTR}]:hover > .${BTN_CLASS},
@@ -224,26 +228,27 @@
       }
       .${BTN_CLASS}:hover {
         opacity: 1 !important;
-        transform: scale(1.04) !important;
-        background: rgba(78, 142, 247, 1) !important;
+        transform: scale(1.05) !important;
+        background: rgba(236, 72, 153, 1) !important;
+        color: #fff !important;
       }
       #${FIXED_ID} {
         position: fixed !important;
         right: 20px !important;
         bottom: 96px !important;
         z-index: 99999 !important;
-        padding: 10px 14px !important;
+        padding: 12px 18px !important;
         border: none !important;
         border-radius: 8px !important;
-        background: rgba(78, 142, 247, 0.95) !important;
+        background: rgba(236, 72, 153, 0.95) !important;
         color: #fff !important;
-        font-size: 14px !important;
+        font-size: 15px !important;
         font-weight: 700 !important;
         cursor: pointer !important;
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35) !important;
       }
       #${FIXED_ID}:hover {
-        background: rgb(78, 142, 247) !important;
+        background: rgb(236, 72, 153) !important;
       }
     `);
   }
