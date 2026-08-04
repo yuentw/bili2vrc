@@ -210,21 +210,22 @@ function copyRetroUrl() {
               <span>📋 格式列表
                 <span id="fmtCount" style="font-weight:normal;font-size:10px">{{ app.retroFmtCountLabel }}</span>
               </span>
-              <label style="display:flex;align-items:center;gap:4px;font-weight:normal;font-size:10px">
-                <span>編碼:</span>
-                <select
-                  class="xp-select"
-                  id="codecFilter"
-                  style="font-size:10px;padding:1px 4px;min-width:110px"
-                  v-model="app.codecFamily"
-                  :disabled="app.codecFamilies.length <= 1"
-                  @change="app.applyCodecFilter()"
-                >
-                  <option v-for="family in app.codecFamilies" :key="family" :value="family">
+              <div class="codec-filter-group retro-codec-filter">
+                <span class="codec-filter-label">編碼:</span>
+                <div class="codec-btn-group" role="group" aria-label="編碼篩選">
+                  <button
+                    v-for="family in app.codecFamilies"
+                    :key="family"
+                    type="button"
+                    class="xp-btn codec-btn"
+                    :class="{ active: app.codecFamily === family }"
+                    :disabled="app.codecFamilies.length <= 1"
+                    @click="app.codecFamily = family; app.applyCodecFilter()"
+                  >
                     {{ codecFamilyLabel(family) }}
-                  </option>
-                </select>
-              </label>
+                  </button>
+                </div>
+              </div>
             </div>
             <div style="overflow-x:auto;border-top:1px solid #aca899">
               <table class="xp-listview" id="fmtTable">
@@ -387,5 +388,35 @@ function copyRetroUrl() {
   text-decoration: none;
   color: #000;
   display: inline-block;
+}
+
+.retro-app :deep(.retro-codec-filter) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: normal;
+  font-size: 10px;
+}
+
+.retro-app :deep(.retro-codec-filter .codec-btn-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.retro-app :deep(.retro-codec-filter .codec-btn) {
+  font-size: 10px;
+  padding: 2px 8px;
+  min-width: auto;
+  min-height: 22px;
+}
+
+.retro-app :deep(.retro-codec-filter .codec-btn.active) {
+  background: linear-gradient(to bottom, #4a8ed8 0%, #2b5db7 100%);
+  border-color: #fff #1a3a80 #1a3a80 #fff;
+  outline-color: #1a3a80;
+  color: white;
+  font-weight: bold;
 }
 </style>

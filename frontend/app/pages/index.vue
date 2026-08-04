@@ -159,20 +159,22 @@ function onResultVideoLoad() {
       <div class="section">
         <div class="section-title fmt-header">
           <span>格式列表 <span id="fmtCount" class="fmt-count">{{ app.fmtCountLabel }}</span></span>
-          <label class="fmt-filter">
-            <span>編碼</span>
-            <select
-              id="codecFilter"
-              class="fmt-filter-select"
-              v-model="app.codecFamily"
-              :disabled="app.codecFamilies.length <= 1"
-              @change="app.applyCodecFilter()"
-            >
-              <option v-for="family in app.codecFamilies" :key="family" :value="family">
+          <div class="codec-filter-group">
+            <span class="codec-filter-label">編碼</span>
+            <div class="codec-btn-group" role="group" aria-label="編碼篩選">
+              <button
+                v-for="family in app.codecFamilies"
+                :key="family"
+                type="button"
+                class="codec-btn"
+                :class="{ active: app.codecFamily === family }"
+                :disabled="app.codecFamilies.length <= 1"
+                @click="app.codecFamily = family; app.applyCodecFilter()"
+              >
                 {{ codecFamilyLabel(family) }}
-              </option>
-            </select>
-          </label>
+              </button>
+            </div>
+          </div>
         </div>
         <div class="table-wrap">
           <table id="fmtTable">

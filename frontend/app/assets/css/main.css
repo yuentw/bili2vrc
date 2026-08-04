@@ -98,28 +98,51 @@
       gap: 12px;
       flex-wrap: wrap;
     }
-    .fmt-filter {
+    .codec-filter-group {
       display: flex;
       align-items: center;
       gap: 12px;
+      flex-wrap: wrap;
       font-weight: 400;
       text-transform: none;
       letter-spacing: 0;
       color: var(--text);
       font-size: var(--fs-sm);
     }
-    .fmt-filter-select {
-      background: var(--bg);
+    .codec-filter-label {
+      flex-shrink: 0;
+    }
+    .codec-btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .codec-btn {
       border: 2px solid var(--border);
+      background: var(--bg);
       color: var(--text);
       font-size: var(--fs-sm);
-      padding: 12px 16px;
+      font-weight: 600;
+      padding: 10px 16px;
+      min-height: 44px;
       border-radius: var(--radius);
-      min-width: 200px;
-      min-height: var(--touch);
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: background .12s, border-color .12s, color .12s;
     }
-    .fmt-filter-select:focus { border-color: var(--accent); outline: none; }
-    .fmt-filter-select option { background: var(--surface2); font-size: var(--fs-sm); }
+    .codec-btn:hover:not(:disabled):not(.active) {
+      background: var(--surface2);
+      border-color: var(--muted);
+    }
+    .codec-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .codec-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
     .section-body {
       padding: var(--pad);
     }
