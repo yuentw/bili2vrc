@@ -43,13 +43,59 @@ ensure_uv() {
   echo "[bili2vrchat] uv 已安裝。"
 }
 
+ensure_bun() {
+  if command -v bun >/dev/null 2>&1; then
+    export PATH="$ROOT/.bun/bin:$PATH"
+    return 0
+  fi
+
+  if [[ -x "$ROOT/.bun/bin/bun" ]]; then
+    export PATH="$ROOT/.bun/bin:$PATH"
+    return 0
+  fi
+
+  echo "[bili2vrchat] 未找到 bun，正在安裝到 .bun ..."
+  export BUN_INSTALL="$ROOT/.bun"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL https://bun.sh/install | bash
+  else
+    echo "[bili2vrchat] 無法安裝 bun：需要 curl。" >&2
+    echo "  手動安裝：https://bun.sh" >&2
+    exit 1
+  fi
+
+  export PATH="$ROOT/.bun/bin:$PATH"
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "[bili2vrchat] 安裝後仍找不到 bun。" >&2
+    echo "  手動安裝：https://bun.sh" >&2
+    exit 1
+  fi
+  echo "[bili2vrchat] bun 已安裝。"
+}
+
+ensure_frontend() {
+  local dist="$ROOT/frontend/.output/public"
+  if [[ -f "$dist/index.html" || -f "$dist/200.html" ]]; then
+    return 0
+  fi
+
+  echo "[bili2vrchat] 前端尚未建置，正在建置 ..."
+  (
+    cd "$ROOT/frontend"
+    bun install
+    bun run generate
+  )
+
+  if [[ ! -f "$dist/index.html" && ! -f "$dist/200.html" ]]; then
+    echo "[bili2vrchat] 建置完成但仍缺少 frontend/.output/public。" >&2
+    exit 1
+  fi
+}
+
 ensure_uv
+ensure_bun
+ensure_frontend
 
-FRONTEND_DIST="$ROOT/frontend/.output/public"
-if [[ ! -f "$FRONTEND_DIST/index.html" && ! -f "$FRONTEND_DIST/200.html" ]]; then
-  echo "[bili2vrchat] 警告：前端尚未建置（缺少 frontend/.output/public）" >&2
-  echo "  請先執行：cd frontend && bun install && bun run generate" >&2
-  echo "  （需安裝 bun：https://bun.sh）" >&2
-fi
-
+echo "[bili2vrchat] 啟動伺服器 ..."
 exec uv run app.py
