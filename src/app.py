@@ -1065,7 +1065,13 @@ def process():
     url        = (data.get("url") or "").strip()
     format_id  = (data.get("format_id") or "").strip()
     key_phrase = data.get("key_phrase", "")
-    ttl        = int(data.get("ttl", config.DEFAULT_TTL))
+    requested_ttl = int(data.get("ttl", config.DEFAULT_TTL))
+    ttl = config.effective_ttl(requested_ttl)
+    if ttl != requested_ttl:
+        logger.info(
+            "ttl clamped: requested=%s effective=%s max=%s",
+            requested_ttl, ttl, config.MAX_TTL,
+        )
     compat_mode = bool(data.get("compat_mode", False))
     playback_speed = clamp_playback_speed(float(data.get("playback_speed", 1) or 1))
     cookie_content = (data.get("cookie_content") or "").strip() or None

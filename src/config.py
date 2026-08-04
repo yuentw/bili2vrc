@@ -49,7 +49,18 @@ FRONTEND_DIST = os.environ.get(
 )
 
 # ── Defaults / 預設值 ──
-DEFAULT_TTL  = int(os.environ.get("DEFAULT_TTL", "604800"))  # 7 days (seconds) / 7 天（秒）
+MAX_TTL = int(os.environ.get("MAX_TTL", "2592000"))  # max retention (30 days); 0 = no cap / 最長保存；0 = 不限制
+
+
+def effective_ttl(ttl_seconds: int) -> int:
+    """Clamp TTL to MAX_TTL; forever (0) is capped when MAX_TTL > 0."""
+    ttl = max(0, int(ttl_seconds))
+    if MAX_TTL > 0 and (ttl == 0 or ttl > MAX_TTL):
+        return MAX_TTL
+    return ttl
+
+
+DEFAULT_TTL = effective_ttl(int(os.environ.get("DEFAULT_TTL", "604800")))  # 7 days (seconds) / 7 天（秒）
 HOST         = os.environ.get("HOST", "0.0.0.0")             # bind address / 綁定位址
 PORT         = int(os.environ.get("PORT", "5000"))             # HTTP port / HTTP 連接埠
 HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")           # auto | libx264 | h264_videotoolbox, etc.
