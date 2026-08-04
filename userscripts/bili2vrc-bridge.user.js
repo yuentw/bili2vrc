@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bili2vrc Bridge
 // @namespace    https://github.com/yuentw/bili2vrc
-// @version      1.0.2
+// @version      1.0.3
 // @description  Bilibili 封面懸浮「下載解析」→ 開啟 bili2vrc 並自動填入網址、獲取格式
 // @author       bili2vrc
 // @match        https://www.bilibili.com/*
@@ -34,7 +34,33 @@
     '.cover-container',
     '.list-item .cover',
     '.bili-dyn-card-video__cover',
+    // Favorites — new UI (space.bilibili.com/*/favlist)
+    '.fav-list-main .bili-video-card__image',
+    '.fav-list-main .bili-video-card__image--wrap',
+    '.fav-list-main .bili-cover-card',
+    '.items__item .bili-video-card__image',
+    '.items__item .bili-video-card__image--wrap',
+    '.items__item .bili-cover-card',
+    // Favorites — legacy UI
+    '.fav-video-list .cover',
+    '.fav-video-list li > a.cover',
+    'ul.fav-video-list .cover',
   ];
+
+  const FAV_ITEM_SELECTORS = [
+    '.fav-list-main .items__item',
+    '.fav-video-list > li',
+    'ul.fav-video-list li',
+  ];
+
+  const FAV_COVER_INNER = [
+    '.bili-video-card__image',
+    '.bili-video-card__image--wrap',
+    '.bili-cover-card',
+    'a.cover',
+    '.cover',
+    '.pic-box',
+  ].join(', ');
 
   const TITLE_OR_INFO_SELECTOR = [
     '.bili-video-card__info',
@@ -93,14 +119,24 @@
     if (fromHost) return fromHost;
 
     const card = element.closest?.(
-      '.bili-video-card, .video-card, .small-item, .bili-dyn-card-video, [data-bvid]',
+      '.bili-video-card, .video-card, .small-item, .bili-dyn-card-video, [data-bvid], .items__item, .fav-video-list li',
     );
     if (card) {
-      const dataBvid = card.getAttribute('data-bvid');
+      const dataBvid =
+        card.getAttribute('data-bvid') ||
+        card.querySelector?.('[data-bvid]')?.getAttribute('data-bvid');
       if (dataBvid && extractBvid(dataBvid)) return extractBvid(dataBvid);
-      const nested = card.querySelector('a[href*="/video/"], a[href*="bvid="]');
+      const nested = card.querySelector(
+        'a[href*="/video/"], a[href*="bvid="], a[href*="/list/"]',
+      );
       const nestedBvid = extractBvid(nested?.href || nested?.getAttribute('href') || '');
       if (nestedBvid) return nestedBvid;
+      // Favlist sometimes puts BV only in title link
+      const titleLink = card.querySelector(
+        '.bili-video-card__title a[href], .title a[href], a.title[href]',
+      );
+      const titleBvid = extractBvid(titleLink?.href || titleLink?.getAttribute('href') || '');
+      if (titleBvid) return titleBvid;
     }
     return null;
   }
@@ -113,8 +149,8 @@
     }
     if (element.matches(COVER_SELECTORS.join(', '))) return true;
     const className = String(element.className || '');
-    if (/pic-box|__image|card-pic|cover-container|dyn-card-video__cover|(^|\s)cover(\s|$)/i.test(className)) {
-      return Boolean(element.querySelector('img'));
+    if (/pic-box|__image|card-pic|cover-container|dyn-card-video__cover|bili-cover-card|(^|\s)cover(\s|$)/i.test(className)) {
+      return Boolean(element.querySelector('img') || element.matches('img') || element.querySelector('picture'));
     }
     return false;
   }
@@ -158,11 +194,21 @@
     });
   }
 
+  function scanFavlistCovers(root = document) {
+    FAV_ITEM_SELECTORS.forEach((itemSel) => {
+      root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        const cover = item.querySelector(FAV_COVER_INNER);
+        if (cover) attachCoverButton(cover);
+      });
+    });
+  }
+
   function scanCovers(root = document) {
     removeStrayButtons();
     COVER_SELECTORS.forEach((selector) => {
       root.querySelectorAll?.(selector)?.forEach((el) => attachCoverButton(el));
     });
+    scanFavlistCovers(root);
   }
 
   function ensureWatchPageButton() {
@@ -223,6 +269,9 @@
       a:hover > .${BTN_CLASS},
       .video-card:hover .${BTN_CLASS},
       .bili-video-card:hover .${BTN_CLASS},
+      .items__item:hover .${BTN_CLASS},
+      .fav-video-list li:hover .${BTN_CLASS},
+      .fav-list-main .items__item:hover .${BTN_CLASS},
       [class*="cover"]:hover .${BTN_CLASS} {
         opacity: 1 !important;
       }
