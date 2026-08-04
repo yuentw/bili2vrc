@@ -1,0 +1,12 @@
+[project]
+name = "bili2vrc"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "boto3>=1.34",
+    "flask>=3.0",
+    "requests>=2.31",
+    "yt-dlp>=2026.7.4",
+]
