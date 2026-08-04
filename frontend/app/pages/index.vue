@@ -20,6 +20,16 @@ const previewVideo = ref<HTMLVideoElement | null>(null)
 onMounted(() => {
   app.loadHwaccelStatus()
   app.updateCookieWarningForUrl(String(app.urlInput ?? ''))
+
+  const incomingUrl = new URL(window.location.href).searchParams.get('url')?.trim()
+  if (incomingUrl) {
+    app.onUrlInput(incomingUrl)
+    void app.fetchFormats()
+    const cleaned = new URL(window.location.href)
+    cleaned.searchParams.delete('url')
+    const next = cleaned.pathname + cleaned.search + cleaned.hash
+    history.replaceState(null, '', next || '/')
+  }
 })
 
 function onCookieFileChange(event: Event) {

@@ -231,6 +231,25 @@ Image builds the Nuxt frontend with Bun, and includes `ffmpeg`, `aria2`, and `no
 
 ---
 
+## Tampermonkey: Bilibili → bili2vrc
+
+Optional userscript: hover a Bilibili video cover → **下載解析** → opens bili2vrc with `?url=` filled and **Fetch formats** started so you can pick a resolution.
+
+**[Install bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** — opens the Tampermonkey install page (requires [Tampermonkey](https://www.tampermonkey.net/) first).
+
+1. Install [Tampermonkey](https://www.tampermonkey.net/)
+2. Click **[Install bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** and confirm install
+3. Start bili2vrc (`start.bat` / `start.sh`)
+4. On Bilibili, hover a video card and click **下載解析**
+
+Source: [userscripts/bili2vrc-bridge.user.js](userscripts/bili2vrc-bridge.user.js)
+
+Default target: `http://localhost:5000`. Change via Tampermonkey menu → **設定 bili2vrc 網址**.
+
+Deep link format: `http://localhost:5000/?url=<encoded bilibili video URL>`
+
+---
+
 ## Usage
 
 1. **Paste URL** — Bilibili or YouTube link → **Fetch formats**
@@ -299,6 +318,7 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | `frontend/.output/public` | Built static files served by Flask |
 | `requirements.txt` | Python deps (Flask, requests, boto3, yt-dlp) |
 | `start.sh` / `start.bat` | Ensure bun + frontend build, then launch |
+| `userscripts/bili2vrc-bridge.user.js` | Optional Tampermonkey bridge (Bilibili → bili2vrc) |
 | `.bun/` | Optional local Bun install (gitignored) |
 | `temp/` | Download/transcode scratch (gitignored) |
 
