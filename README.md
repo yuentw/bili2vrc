@@ -24,14 +24,17 @@ Browser → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
 
 | Tool | Required | Notes |
 |------|----------|--------|
-| Python 3.10+ | Yes | 3.14 tested |
+| Python 3.14+ | Yes | See `.python-version` / `pyproject.toml` |
+| [uv](https://docs.astral.sh/uv/) | Yes | Python deps + `uv run app.py` |
 | [ffmpeg](https://ffmpeg.org/) | Yes | `ffmpeg` and `ffprobe` on `PATH` |
 | [Node.js](https://nodejs.org/) | Yes for YouTube | yt-dlp (`--js-runtimes node`) |
-| [Bun](https://bun.sh/) | Yes (frontend) | Nuxt UI build; `start.bat` / `start.sh` install into project `.bun` if missing |
+| [Bun](https://bun.sh/) | Yes (frontend build) | `cd frontend && bun install && bun run generate` — not installed by start scripts |
 | Cloudflare R2 bucket | Yes | see [R2 setup](#cloudflare-r2-setup) below |
 | [aria2](https://github.com/aria2/aria2) | Optional | faster Bilibili downloads; **not bundled** — install yourself (see below); **not used for YouTube** |
 
-### Python packages (`requirements.txt`)
+### Python dependencies (`pyproject.toml` + `uv.lock`)
+
+Managed with [uv](https://docs.astral.sh/uv/). Main packages:
 
 | Package | Role |
 |---------|------|
@@ -39,12 +42,15 @@ Browser → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
 | requests | HTTP helpers |
 | boto3 | Cloudflare R2 (S3-compatible) upload |
 | yt-dlp | Bilibili / YouTube download |
+| python-dotenv | Load `.env` at startup (`src/config.py`) |
+
+`requirements.txt` is kept for reference; use `uv sync` / `uv lock` for installs.
 
 ### Frontend (`frontend/`)
 
-| Package | Role |
-|---------|------|
-| Nuxt 4 / Vue 3 | Static UI (`bun run generate` → `frontend/.output/public`) |
+| Stack | Role |
+|-------|------|
+| Nuxt 4 / Vue 3 | SPA UI (`bun run generate` → `frontend/.output/public`, served by Flask) |
 
 ---
 
@@ -96,11 +102,11 @@ Public R2 URLs support **HTTP Range** requests. Combined with the app’s **fast
 
 ## Configure bili2vrchat
 
-Two ways (env vars override `config.py`):
+Two ways (env vars override `src/config.py`). You can also copy [.env.example](.env.example) to `.env` — `load_dotenv()` runs on import.
 
-### Option A — Edit `config.py` (simplest for local use)
+### Option A — Edit `src/config.py` (simplest for local use)
 
-Open `config.py` and replace the `Fill in … here` placeholders:
+Open `src/config.py` and replace the `Fill in … here` placeholders:
 
 ```python
 CF_ACCOUNT_ID        = os.environ.get("CF_ACCOUNT_ID", "your-account-id")
@@ -112,7 +118,7 @@ R2_PUBLIC_BASE_URL   = os.environ.get("R2_PUBLIC_BASE_URL", "https://pub-xxxx.r2
 
 Values starting with `Fill in ` are treated as **not configured**.
 
-> Do not commit real secrets to git. Use env vars or a local-only `config.py` for production.
+> Do not commit real secrets to git. Use env vars or a local-only `src/config.py` for production.
 
 ### Option B — Environment variables
 
@@ -140,16 +146,18 @@ export R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 
 ## Install & run
 
-`start.bat` / `start.sh` will:
+### One-time setup
 
-1. Use system `bun`, or project `.bun`, or install Bun into `.bun`
-2. Run `bun install` + `bun run generate` in `frontend/`
-3. Install Python deps from `requirements.txt` (Windows) / use existing venv (Unix)
-4. Start `app.py`
+1. Install **uv**, **ffmpeg**, **Node.js** (see [Prerequisites](#prerequisites))
+2. Sync Python deps: `uv sync`
+3. Build frontend: `cd frontend && bun install && bun run generate`
+4. Configure R2 (see above); optional: `cp .env.example .env`
+
+`start.bat` / `start.sh` only run `uv run app.py`. They **do not** install Bun or build the frontend — they **warn** if `frontend/.output/public` is missing.
 
 ### Windows
 
-1. Install **Python 3**, **ffmpeg** (`ffmpeg -version`), **Node.js** (`node -version`)
+1. Install **Python 3.14+**, **uv**, **ffmpeg** (`ffmpeg -version`), **Node.js** (`node -version`), **Bun** (for frontend build)
 2. Optional: for faster Bilibili downloads, download `aria2c.exe` from [aria2 releases](https://github.com/aria2/aria2/releases) and place it in the project root (not bundled)
 3. Configure R2 (see above)
 4. Run:
@@ -161,12 +169,12 @@ start.bat
 Or manually:
 
 ```bat
+uv sync
 cd frontend
 bun install
 bun run generate
 cd ..
-python -m pip install -r requirements.txt
-python app.py
+uv run app.py
 ```
 
 5. Open [http://localhost:5000](http://localhost:5000)
@@ -177,23 +185,15 @@ python app.py
 
 ```bash
 # macOS
-brew install ffmpeg node curl
+brew install ffmpeg node uv
 
-# Debian / Ubuntu (unzip required if Bun installer runs)
+# Debian / Ubuntu
 sudo apt update
-sudo apt install -y ffmpeg nodejs python3 python3-pip python3-venv curl unzip
+sudo apt install -y ffmpeg nodejs curl
+# uv: https://docs.astral.sh/uv/getting-started/installation/
 ```
 
 Optional aria2: `brew install aria2` or `sudo apt install -y aria2`.
-
-**venv (recommended):**
-
-```bash
-cd /path/to/bili2vrchat
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -r requirements.txt
-```
 
 **Start:**
 
@@ -205,18 +205,36 @@ chmod +x start.sh   # first time only
 Or manually:
 
 ```bash
+uv sync
 cd frontend && bun install && bun run generate && cd ..
-python3 app.py
+uv run app.py
 ```
 
 Open [http://localhost:5000](http://localhost:5000). On LAN: `http://<host-ip>:5000` (bind `0.0.0.0` by default).
 
 **Retro UI:** [http://localhost:5000/retro](http://localhost:5000/retro)
 
-### Docker
+### Frontend dev (optional)
+
+Run Flask and Nuxt dev server separately (API proxied to Flask):
 
 ```bash
-docker build -t bili2vrchat .
+uv run app.py          # :5000 — API + built UI if present
+cd frontend && bun run dev   # :3000 — hot reload; /api/* → :5000
+```
+
+### Docker
+
+Build:
+
+```bash
+./build-image.sh              # → mio9/bili2vrc:latest (see script for tags)
+# or: docker build -t bili2vrchat .
+```
+
+Run:
+
+```bash
 docker run --rm -p 5000:5000 \
   -e CF_ACCOUNT_ID=your-account-id \
   -e R2_ACCESS_KEY_ID=your-access-key-id \
@@ -227,7 +245,7 @@ docker run --rm -p 5000:5000 \
   bili2vrchat
 ```
 
-Image builds the Nuxt frontend with Bun, and includes `ffmpeg`, `aria2`, and `nodejs`. Pass R2 credentials via `-e` (do not bake secrets into the image).
+Image: Bun builds Nuxt frontend; Python deps via `uv sync` from `uv.lock`; `CMD` is `uv run app.py`. Includes `ffmpeg`, `aria2`, `nodejs`. Pass R2 credentials via `-e` or `--env-file` (do not bake secrets into the image).
 
 ---
 
@@ -282,7 +300,7 @@ A **background thread** in this app scans the bucket every `R2_CLEANUP_INTERVAL`
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CF_ACCOUNT_ID` | `Fill in …` in `config.py` | Cloudflare account ID |
+| `CF_ACCOUNT_ID` | `Fill in …` in `src/config.py` | Cloudflare account ID |
 | `R2_ACCESS_KEY_ID` | `Fill in …` | R2 API access key ID |
 | `R2_SECRET_ACCESS_KEY` | `Fill in …` | R2 API secret |
 | `R2_BUCKET_NAME` | `Fill in …` | Bucket name (**required**) |
@@ -310,16 +328,19 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 
 | Path | Role |
 |------|------|
-| `app.py` | Flask app: download / transcode / upload pipeline |
-| `config.py` | Settings (R2 credentials, TTL, server) |
-| `r2.py` | R2 upload, public URL builder, expiry cleanup |
-| `hwaccel.py` | Hardware encoder detection |
-| `frontend/` | Nuxt 4 UI (`bun run generate`) |
+| `app.py` | Entry launcher → runs `src/app.py` via `uv run` |
+| `src/app.py` | Flask app: download / transcode / upload pipeline |
+| `src/config.py` | Settings (R2, TTL, server paths); loads `.env` |
+| `src/r2.py` | R2 upload, public URL builder, expiry cleanup |
+| `src/hwaccel.py` | Hardware encoder detection |
+| `frontend/` | Nuxt 4 SPA (`bun run generate` or `bun run dev`) |
 | `frontend/.output/public` | Built static files served by Flask |
-| `requirements.txt` | Python deps (Flask, requests, boto3, yt-dlp) |
-| `start.sh` / `start.bat` | Ensure bun + frontend build, then launch |
+| `pyproject.toml` / `uv.lock` | Python project + locked deps (uv) |
+| `requirements.txt` | Legacy pip list (mirror of main deps) |
+| `start.sh` / `start.bat` | Check `uv`, warn if frontend missing, `uv run app.py` |
+| `build-image.sh` | Docker image build helper |
+| `Dockerfile` | Multi-stage: Bun frontend + `uv sync` + Python runtime |
 | `userscripts/bili2vrc-bridge.user.js` | Optional Tampermonkey bridge (Bilibili → bili2vrc) |
-| `.bun/` | Optional local Bun install (gitignored) |
 | `temp/` | Download/transcode scratch (gitignored) |
 
 ---
@@ -328,12 +349,12 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 
 | Issue | Check |
 |-------|--------|
-| `請設定 R2 環境變數` / R2 not configured | Fill `config.py` or set env vars; avoid leaving `Fill in …` placeholders |
+| `請設定 R2 環境變數` / R2 not configured | Fill `src/config.py` or set env vars / `.env`; avoid `Fill in …` placeholders |
 | Upload fails (403 / signature) | Rotate API token; verify bucket name and permissions |
 | No HTTP URL after upload | Set `R2_PUBLIC_BASE_URL`; enable bucket **Settings → Custom Domains** (or Public Development URL) |
 | YouTube fetch fails | Install Node.js; run `node -version` |
-| Frontend missing / blank UI | Run `cd frontend && bun install && bun run generate` (or use `start.bat` / `start.sh`) |
-| `bun` install fails | Check network; on Linux install `curl` + `unzip`; or install Bun from [bun.sh](https://bun.sh/) |
+| `uv` not found | Install from [uv docs](https://docs.astral.sh/uv/getting-started/installation/) |
+| Frontend missing / blank UI | Run `cd frontend && bun install && bun run generate` (start scripts only warn) |
 | Bilibili slow | Add `aria2c.exe` to project root (Windows) or install aria2 to `PATH` |
 | Expired files still in bucket | App must be running for cleanup; or wait until next scan interval |
 | VRChat won’t play / can’t seek | Enable **VRChat compat mode**; ensure `R2_PUBLIC_BASE_URL` is set |
