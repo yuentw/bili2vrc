@@ -18,13 +18,13 @@ RUN apt-get update \
 
 WORKDIR /app
 
-ENV UV_SYSTEM_PYTHON=1 \
+ENV UV_NO_DEV=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-COPY requirements.txt .
+COPY pyproject.toml uv.lock .python-version ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -r requirements.txt
+    uv sync --frozen --no-install-project
 
 COPY app.py ./
 COPY src/ ./src/
@@ -41,4 +41,4 @@ EXPOSE 5000
 
 VOLUME ["/app/temp"]
 
-CMD ["python", "app.py"]
+CMD ["uv", "run", "app.py"]
