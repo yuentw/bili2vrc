@@ -8,6 +8,18 @@ def is_set(value: str) -> bool:
     return bool(value) and not value.startswith("Fill in ")
 
 
+def _with_https(url: str) -> str:
+    """Add https:// when scheme is missing (so <video src> is absolute)."""
+    cleaned = (url or "").strip().rstrip("/")
+    if not cleaned or cleaned.startswith("Fill in "):
+        return cleaned
+    if cleaned.startswith("//"):
+        return "https:" + cleaned
+    if not cleaned.lower().startswith(("http://", "https://")):
+        return "https://" + cleaned
+    return cleaned
+
+
 # ── Cloudflare R2（S3-compatible API / S3 相容 API）──
 # Replace quoted defaults below, or use env vars / 請改下方引號內的值，或改用環境變數
 CF_ACCOUNT_ID        = os.environ.get("CF_ACCOUNT_ID", "Fill in CF Account ID here")
@@ -16,7 +28,10 @@ R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "Fill in R2 Secret
 R2_BUCKET_NAME       = os.environ.get("R2_BUCKET_NAME", "Fill in R2 bucket name here")
 
 # Optional public URL (R2.dev or custom domain) / 選填：公開網址（R2.dev 或自訂網域）
-R2_PUBLIC_BASE_URL   = os.environ.get("R2_PUBLIC_BASE_URL", "Fill in R2 public URL here (optional)").rstrip("/")
+# 可只填網域；載入時若無 http(s):// 會自動加上 https://
+R2_PUBLIC_BASE_URL = _with_https(
+    os.environ.get("R2_PUBLIC_BASE_URL", "Fill in R2 public URL here (optional)")
+)
 
 # Expired-object cleanup via metadata expires / 過期檔案清理（依 metadata expires 刪除）
 R2_CLEANUP_ENABLED   = os.environ.get("R2_CLEANUP_ENABLED", "1").lower() in ("1", "true", "yes", "on")
