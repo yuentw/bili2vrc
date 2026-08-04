@@ -492,6 +492,7 @@ def transcode_h264(
     """
     speed = clamp_playback_speed(float(playback_speed))
     has_audio = _probe_has_audio(src)
+    source_fps = hwaccel.probe_video_fps(src)
     step = "stretch" if abs(speed - 1.0) > 1e-6 else "reencode"
 
     encoders_to_try = [hwaccel.get_video_encoder()]
@@ -504,6 +505,7 @@ def transcode_h264(
         emit_fn,
         speed=speed,
         has_audio=has_audio,
+        source_fps=source_fps,
         step=step,
         encoders=encoders_to_try,
         cancel_event=cancel_event,
@@ -518,17 +520,21 @@ def _transcode_h264_try(
     *,
     speed: float,
     has_audio: bool,
+    source_fps: float,
     step: str,
     encoders: list,
     cancel_event: threading.Event | None,
     register_proc,
 ) -> bool:
-    for encoder in encoders:
+    for index, encoder in enumerate(encoders):
         if os.path.isfile(dst):
             try:
                 os.remove(dst)
             except OSError:
                 pass
+
+        if index > 0:
+            emit_fn(step, f"{encoders[index - 1].label} 失敗，改用 {encoder.label}…")
 
         if abs(speed - 1.0) > 1e-6:
             emit_msg = f"時間拉伸 {speed}x + H.264 ({encoder.label})..."
@@ -536,37 +542,40 @@ def _transcode_h264_try(
             emit_msg = f"重新編碼 H.264 ({encoder.label})..."
         emit_fn(step, emit_msg)
 
-        cmd = ["ffmpeg", "-hide_banner", "-y", "-i", src]
+        video_filter = hwaccel.compose_video_filter(
+            speed, encoder, source_fps=source_fps,
+        )
+        decode_args = hwaccel.decode_hwaccel_args(encoder)
+        cmd = [
+            "ffmpeg", "-hide_banner", "-y",
+            *encoder.global_args,
+            *decode_args,
+            "-i", src,
+        ]
 
-        if abs(speed - 1.0) > 1e-6:
-            video_chain = f"setpts=PTS/{speed}"
-            if encoder.hw_video_filter:
-                video_chain = f"{video_chain},{encoder.hw_video_filter}"
-            if has_audio:
-                filter_graph = (
-                    f"[0:v]{video_chain}[v];"
-                    f"[0:a:0]{_build_atempo_filter(speed)}[a]"
-                )
-                cmd += ["-filter_complex", filter_graph, "-map", "[v]", "-map", "[a]"]
-            else:
-                cmd += ["-filter:v", video_chain, "-an"]
+        if has_audio and abs(speed - 1.0) > 1e-6:
+            filter_graph = (
+                f"[0:v]{video_filter}[v];"
+                f"[0:a:0]{_build_atempo_filter(speed)}[a]"
+            )
+            cmd += ["-filter_complex", filter_graph, "-map", "[v]", "-map", "[a]"]
+        elif has_audio:
+            cmd += ["-vf", video_filter, "-map", "0:v:0", "-map", "0:a:0?"]
         else:
-            if encoder.hw_video_filter:
-                cmd += ["-vf", encoder.hw_video_filter]
-            cmd += ["-map", "0:v:0"]
-            if has_audio:
-                cmd += ["-map", "0:a:0?"]
-            else:
-                cmd += ["-an"]
+            cmd += ["-vf", video_filter, "-an"]
 
-        cmd += ["-c:v", encoder.name, *encoder.video_args, "-pix_fmt", "yuv420p"]
+        cmd += ["-c:v", encoder.name, *encoder.video_args]
+        # QSV only: pin safe constant fps (avoids "frame rate unsupported" after setpts)
+        if encoder.name == "h264_qsv":
+            out_fps = hwaccel.snap_fps_for_encoder(encoder, source_fps or 30)
+            cmd += ["-r", str(out_fps)]
         if has_audio:
             cmd += ["-c:a", "aac", "-b:a", "192k"]
         cmd += ["-movflags", "+faststart", dst]
 
         logger.info(
-            "transcode start: encoder=%s speed=%sx audio=%s src=%s",
-            encoder.name, speed, has_audio, os.path.basename(src),
+            "transcode start: encoder=%s speed=%sx fps_in=%.3f audio=%s src=%s",
+            encoder.name, speed, source_fps or 0, has_audio, os.path.basename(src),
         )
         ok, err_tail = _run_ffmpeg_transcode(
             cmd,
@@ -581,6 +590,46 @@ def _transcode_h264_try(
         if ok and os.path.isfile(dst) and os.path.getsize(dst) > 0:
             logger.info("transcode done: %s (%s)", os.path.basename(dst), encoder.name)
             return True
+
+        if decode_args:
+            logger.warning(
+                "transcode failed with decode accel (%s); retry without: %s",
+                encoder.name, err_tail or "(no output)",
+            )
+            cmd_no_hw = [
+                "ffmpeg", "-hide_banner", "-y",
+                *encoder.global_args,
+                "-i", src,
+            ]
+            try:
+                input_idx = cmd.index("-i")
+                cmd_no_hw += cmd[input_idx + 2 :]
+            except ValueError:
+                cmd_no_hw = None
+            if cmd_no_hw:
+                if os.path.isfile(dst):
+                    try:
+                        os.remove(dst)
+                    except OSError:
+                        pass
+                ok2, err_tail2 = _run_ffmpeg_transcode(
+                    cmd_no_hw,
+                    step=step,
+                    emit_msg=emit_msg + " (軟體解碼)",
+                    emit_fn=emit_fn,
+                    cancel_event=cancel_event,
+                    register_proc=register_proc,
+                )
+                if cancel_event and cancel_event.is_set():
+                    return False
+                if ok2 and os.path.isfile(dst) and os.path.getsize(dst) > 0:
+                    logger.info(
+                        "transcode done without decode accel: %s (%s)",
+                        os.path.basename(dst), encoder.name,
+                    )
+                    return True
+                err_tail = err_tail2 or err_tail
+
         logger.error(
             "transcode failed with %s (speed=%s): %s",
             encoder.name, speed, err_tail or "(no output)",
@@ -1092,11 +1141,17 @@ def process_cancel_route():
 
 @app.route("/api/hwaccel-status")
 def hwaccel_status():
-    encoder = hwaccel.get_video_encoder()
+    probe = hwaccel.get_probe_result()
+    encoder = probe.encoder
     return jsonify({
         "encoder": encoder.name,
         "label": encoder.label,
         "fallback": encoder.fallback,
+        "available": probe.available,
+        "smoke_failures": probe.smoke_failures,
+        "decode_hwaccel": hwaccel.decode_hwaccel_args(encoder),
+        "gpus": probe.gpus,
+        "note": probe.note,
     })
 
 

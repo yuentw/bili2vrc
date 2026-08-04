@@ -319,8 +319,10 @@ function copyRetroUrl() {
             <video
               ref="previewVideo"
               id="previewVideo"
+              :key="app.resultUrl"
               controls
               playsinline
+              preload="metadata"
               :src="app.resultUrl"
               @loadeddata="onResultVideoLoad"
             />

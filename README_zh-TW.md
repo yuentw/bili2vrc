@@ -77,9 +77,14 @@
 
 R2 預設為私有。若要產生 HTTP 連結給 VRChat：
 
-1. 進入 bucket → **Settings**
-2. 啟用 **Public access**／**R2.dev subdomain**（或綁定自訂網域）
-3. 複製公開網址，例如 `https://pub-xxxxxxxx.r2.dev` → `R2_PUBLIC_BASE_URL`
+1. Cloudflare 儀表板 → **R2 Object Storage** → 進入你的 **bucket**
+2. 開啟 **Settings**
+3. 在 **Custom Domains** 點 **Add**，綁定自訂網域（例如 `b2v.example.com`）
+4. 等到 **Status** 為 **Active**、**Access** 為 **Enabled**
+5. 將該網域設為 `R2_PUBLIC_BASE_URL`，例如 `https://b2v.example.com`  
+   （可省略 `https://`，程式會自動補上）
+
+同一頁也可改開 **Public Development URL**（`https://pub-xxxxxxxx.r2.dev`）作為 `R2_PUBLIC_BASE_URL`。
 
 若未設定 `R2_PUBLIC_BASE_URL`，上傳仍會成功，但完成後顯示的是 `r2://bucket/key`，不是可播放的 HTTP 網址。
 
@@ -305,7 +310,7 @@ docker run --rm -p 5000:5000 \
 |------|------|
 | 提示 `請設定 R2 環境變數` | 填好 `config.py` 或環境變數，勿保留 `Fill in …` |
 | 上傳失敗（403／簽章錯誤） | 重建 API Token；確認 bucket 名稱與權限 |
-| 完成後沒有 HTTP 網址 | 設定 `R2_PUBLIC_BASE_URL` 並開啟 bucket 公開存取 |
+| 完成後沒有 HTTP 網址 | 設定 `R2_PUBLIC_BASE_URL`；在 bucket **Settings → Custom Domains** 綁定網域（或開啟 Public Development URL） |
 | YouTube 獲取格式失敗 | 安裝 Node.js，確認 `node -version` |
 | 前端空白／找不到頁面 | 執行 `cd frontend && bun install && bun run generate`（或用 `start.bat`／`start.sh`） |
 | `bun` 安裝失敗 | 檢查網路；Linux 需 `curl`＋`unzip`；或至 [bun.sh](https://bun.sh/) 自行安裝 |
