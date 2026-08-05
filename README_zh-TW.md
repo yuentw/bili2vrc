@@ -4,7 +4,7 @@
 
 [English](README.md) | **繁體中文**
 
-用於下載 **Bilibili / YouTube** 影片，並透過 **R2 S3 API** 上傳至**你自己的 Cloudflare R2 儲存桶**。產生**直連網址**，可在 **VRChat** 觀看，並支援**影片倍速**調節。**不需要**部署 Cloudflare Worker。
+用於下載 **Bilibili / YouTube** 影片，並透過 **R2 S3 API** 上傳至**你自己的 Cloudflare R2 儲存桶**。產生**直連網址**，可在 **VRChat** 觀看，並支援**影片倍速**、**CBR／VBR 編碼**與硬體加速。**不需要**部署 Cloudflare Worker。
 
 ```
 瀏覽器 → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat 直連
@@ -13,10 +13,17 @@
 ## 功能
 
 - 支援 **Bilibili**、**YouTube** 下載（yt-dlp）
-- 可選 **VRChat 相容模式**（H.264 重編碼）、播放速度調整、faststart
-- 上傳至**你的 R2 bucket**（boto3 / S3 相容 API）
+- **播放速度**（上傳前永久變更；≠ 1.0x 會重編碼）
+- **VRChat 相容模式**（強制 H.264 重編碼，修復部分撕裂）
+- **編碼模式**：**VBR**（品質 + 碼率上限）／**CBR**（固定碼率）
+- **編碼品質**預設：高畫質／標準／較小／最小
+- **碼率**：可選「原始」或自訂預設；僅「原始」會在倍速時自動 × 倍速調整碼率
+- 硬體編碼自動偵測（NVENC／QSV／AMF／VideoToolbox 等），失敗回退 libx264
+- 下載後 **ffprobe 完整性驗證**（可讀串流、時長 > 0）；原速且未開相容模式僅做 **faststart**（不重編碼）
+- 上傳至**你的 R2 bucket**；完成後以 **R2 公開網址**預覽（不經本機串流）
 - UI 可選**保存時間**（1 小時／1 天／7 天／30 天／永久），背景自動清理過期檔案
-- Cookie 僅存於**瀏覽器 localStorage**，不會長期留在伺服器
+- Cookie 僅存於**瀏覽器 localStorage**
+- 現代版 UI：**貼上**按鈕（申請剪貼簿權限；HTTP 環境可改 Ctrl+V）
 
 ---
 
@@ -25,12 +32,12 @@
 | 工具 | 是否必需 | 說明 |
 |------|----------|------|
 | Python 3.14+ | 是 | 見 `.python-version`、`pyproject.toml` |
-| [uv](https://docs.astral.sh/uv/) | 是 | Python 依賴與 `uv run app.py` |
+| [uv](https://docs.astral.sh/uv/) | 是 | Python 依賴與 `uv run app.py`；啟動腳本可裝到專案 `.uv` |
 | [ffmpeg](https://ffmpeg.org/) | 是 | `ffmpeg`、`ffprobe` 需在 `PATH` |
 | [Node.js](https://nodejs.org/) | YouTube 必需 | 供 yt-dlp 使用（`--js-runtimes node`） |
-| [Bun](https://bun.sh/) | 是（前端建置） | `cd frontend && bun install && bun run generate`；啟動腳本**不會**自動安裝 |
+| [Bun](https://bun.sh/) | 是（前端建置） | 啟動腳本可裝到專案 `.bun` 並建置前端 |
 | Cloudflare R2 儲存桶 | 是 | 見下方 [R2 設定教學](#cloudflare-r2-設定教學) |
-| [aria2](https://github.com/aria2/aria2) | 可選 | 加速 Bilibili 下載；**本專案不附帶**，需自行安裝（見下方）；**不用於 YouTube** |
+| [aria2](https://github.com/aria2/aria2) | 可選 | 加速 Bilibili 下載；**本專案不附帶**；**不用於 YouTube** |
 
 ### Python 依賴（`pyproject.toml` + `uv.lock`）
 
@@ -98,6 +105,8 @@ R2 預設為私有。若要產生 HTTP 連結給 VRChat：
 
 公開 R2 網址支援 **HTTP Range** 請求。搭配本工具的 **faststart** 處理，VRChat 可邊下邊播、支援拖曳進度，無需等整支影片下載完。這是漸進式 MP4 播放，不是 HLS／直播串流。
 
+上傳完成後，網頁預覽直接使用 **R2 公開網址**；本機 Flask 關機後，已開著的結果頁仍可播放（R2 連結有效即可），但無法再獲取格式或新上傳。
+
 ---
 
 ## 設定 bili2vrchat
@@ -148,17 +157,21 @@ export R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 
 ### 首次設定
 
-1. 安裝 **uv**、**ffmpeg**、**Node.js**（見 [前置依賴](#前置依賴)）
-2. 同步 Python 依賴：`uv sync`
-3. 建置前端：`cd frontend && bun install && bun run generate`
-4. 設定 R2（見上方）；可選：`cp .env.example .env`
+1. 安裝 **ffmpeg**、**Node.js**（YouTube）；見 [前置依賴](#前置依賴)
+2. 設定 R2（見上方）；可選：`cp .env.example .env`
+3. 執行 `start.bat`／`start.sh`（會自動處理 uv／Bun／前端建置）
 
-`start.bat`／`start.sh` 僅執行 `uv run app.py`。**不會**自動安裝 Bun 或建置前端；若缺少 `frontend/.output/public` 只會**警告**。
+`start.bat`／`start.sh` 會：
+
+- 若無 **uv**，安裝到專案 `.uv`
+- 若無 **Bun**，安裝到專案 `.bun`
+- 若缺少 `frontend/.output/public`，自動 `bun install` + `bun run generate`
+- 然後 `uv run app.py`
 
 ### Windows
 
-1. 安裝 **Python 3.14+**、**uv**、**ffmpeg**（`ffmpeg -version`）、**Node.js**（`node -version`）、**Bun**（前端建置用）
-2. 可選：若要加速 Bilibili，從 [aria2 releases](https://github.com/aria2/aria2/releases) 下載 `aria2c.exe` 放在專案根目錄（本專案不附帶）
+1. 安裝 **Python 3.14+**、**ffmpeg**（`ffmpeg -version`）、**Node.js**（`node -version`）
+2. 可選：若要加速 Bilibili，從 [aria2 releases](https://github.com/aria2/aria2/releases) 下載 `aria2c.exe` 放在專案根目錄
 3. 完成上方 R2 設定
 4. 執行：
 
@@ -177,7 +190,7 @@ cd ..
 uv run app.py
 ```
 
-5. 開啟 [http://localhost:5000](http://localhost:5000)
+5. 開啟 [http://localhost:5000](http://localhost:5000)（剪貼簿權限請用 localhost／HTTPS）
 
 ### Unix（macOS / Linux）
 
@@ -210,7 +223,7 @@ cd frontend && bun install && bun run generate && cd ..
 uv run app.py
 ```
 
-瀏覽器開啟 [http://localhost:5000](http://localhost:5000)。同一區域網路可用 `http://<主機IP>:5000`。
+瀏覽器開啟 [http://localhost:5000](http://localhost:5000)。同一區域網路可用 `http://<主機IP>:5000`（區網 HTTP **無法**申請剪貼簿讀取權限，請改手動貼上或用 Ctrl+V 備援）。
 
 **復古介面：** [http://localhost:5000/retro](http://localhost:5000/retro)
 
@@ -253,6 +266,8 @@ docker run --rm -p 5000:5000 \
 
 可選油猴腳本：滑鼠移到 B 站影片封面上出現 **下載解析** → 開啟 bili2vrc，自動填入 `?url=` 並執行 **獲取格式**，再手動選解析度。
 
+支援封面懸浮（首頁／搜尋／動態等）、**收藏夾**、**歷史記錄**、觀看頁**右側推薦**等。
+
 **[一鍵安裝 bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** — 會開啟 Tampermonkey 安裝頁（需先安裝 [Tampermonkey](https://www.tampermonkey.net/)）。
 
 1. 安裝 [Tampermonkey](https://www.tampermonkey.net/)
@@ -270,16 +285,29 @@ docker run --rm -p 5000:5000 \
 
 ## 使用教學
 
-1. **貼上網址** — Bilibili 或 YouTube 連結 → 點 **獲取格式**
+1. **貼上網址** — Bilibili 或 YouTube 連結 → 點 **獲取格式**（現代版亦可點 **貼上**，讀取剪貼簿後自動獲取）
 2. **Cookie（若需要）** — 會員／年齡限制影片：匯出 `cookies.txt` 並在頁面上傳（僅存瀏覽器）。詳見 [cookies/README.md](cookies/README.md)
-3. **選擇格式** — 在表格中選解析度／編碼
+3. **選擇格式** — 在表格中選解析度／編碼（會帶入「原始」碼率）
 4. **上傳選項**
    - **自訂路徑** — 可選 object key；留空則隨機 `f_xxxxxx`
    - **保存時間** — 1 小時／1 天／7 天／30 天／永久（非永久會自動刪除）
-   - **播放速度** — 上傳前永久變更速度
+   - **播放速度** — 上傳前永久變更；≠ 1.0x 會重編碼（CFR + 保留音高）
+   - **編碼模式** — VBR（品質 + 上限）或 CBR（固定碼率）
+   - **編碼品質** — 高畫質／標準／較小／最小
+   - **碼率** — 「原始」或自訂預設  
+     - CBR 自訂：`2000 / 4000 / 5000 / 6000 / 8000 / 10000` kbps  
+     - 僅選「原始」時，倍速會自動 × 倍速調整碼率；自訂 CBR／VBR **不**隨倍速相乘
    - **VRChat 相容模式** — 重編碼為 H.264（修復部分撕裂問題，較慢）
-5. **開始處理** — 下載 → 轉碼（若需要）→ 上傳 R2
+5. **開始處理** — 下載 → 驗證 → 轉碼（若需要）→ 上傳 R2 → 以 R2 網址預覽
 6. **複製連結** — 完成後貼到 VRChat
+
+### 何時會重編碼？
+
+| 條件 | 行為 |
+|------|------|
+| 原速（1.0x）且未開相容模式 | 僅 **faststart**（`-c copy`），不重編碼 |
+| 開啟 VRChat 相容模式 | H.264 重編碼 |
+| 播放速度 ≠ 1.0x | 時間拉伸 + H.264 重編碼 |
 
 完成範例：`https://pub-xxxx.r2.dev/f_abc123`
 
@@ -290,7 +318,7 @@ docker run --rm -p 5000:5000 \
 | UI 選項 | 行為 |
 |---------|------|
 | 1 小時／1 天／7 天／30 天 | 寫入 R2 物件 metadata `expires` |
-| 永久保存 | `expires = 0`（不自動刪除） |
+| 永久保存 | `expires = 0`（不自動刪除；若設了 `MAX_TTL` 會被上限截斷） |
 
 本程式會以背景執行緒每 `R2_CLEANUP_INTERVAL` 秒（預設 3600）掃描 bucket，刪除已過期物件。**僅在程式運行時**才會執行清理。
 
@@ -307,11 +335,18 @@ docker run --rm -p 5000:5000 \
 | `R2_PUBLIC_BASE_URL` | `Fill in … (optional)` | 公開網址（VRChat 直連） |
 | `R2_CLEANUP_ENABLED` | 開啟 | `0` / `false` 停用過期清理 |
 | `R2_CLEANUP_INTERVAL` | `3600` | 過期掃描間隔（秒） |
+| `MAX_TTL` | `2592000` | 最長保存（秒）；`0` = 不限制；永久選項會被截斷 |
 | `DEFAULT_TTL` | `604800` | UI 未指定時預設 7 天 |
+| `DEFAULT_BITRATE_KBPS` | `3000` | 重編碼預設碼率（kbps） |
+| `MIN_BITRATE_KBPS` | `500` | 碼率下限 |
+| `MAX_BITRATE_KBPS` | `50000` | 碼率上限；`0` = 不限制 |
+| `SPEED_BITRATE_FACTOR` | `1.0` | 「原始」碼率 × 倍速時的額外倍率 |
+| `DEFAULT_ENCODE_MODE` | `vbr` | `vbr` 或 `cbr` |
+| `DEFAULT_ENCODE_QUALITY` | `balanced` | `high`／`balanced`／`medium`／`small` |
 | `HOST` | `0.0.0.0` | 綁定位址 |
 | `PORT` | `5000` | HTTP 連接埠 |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt 靜態輸出目錄 |
-| `HW_ENCODER` | `auto` | `auto`、`libx264`、`h264_videotoolbox` 等 |
+| `HW_ENCODER` | `auto` | `auto`、`libx264`、`h264_qsv`、`h264_nvenc` 等 |
 | `LOG_LEVEL` | `INFO` | 日誌級別 |
 | `DISABLE_ARIA2C` | 關閉 | `1` / `true` 停用 aria2c |
 | `COOKIE_MAX_BYTES` | `65536` | 單次 Cookie 上限 |
@@ -329,15 +364,15 @@ docker run --rm -p 5000:5000 \
 | 路徑 | 用途 |
 |------|------|
 | `app.py` | 入口啟動器 → 以 `uv run` 執行 `src/app.py` |
-| `src/app.py` | Flask：下載／轉碼／上傳流程 |
-| `src/config.py` | 設定（R2、TTL、路徑）；載入 `.env` |
+| `src/app.py` | Flask：下載／驗證／轉碼／上傳流程 |
+| `src/config.py` | 設定（R2、TTL、編碼、路徑）；載入 `.env` |
 | `src/r2.py` | R2 上傳、公開網址、過期清理 |
-| `src/hwaccel.py` | 硬體編碼器偵測 |
+| `src/hwaccel.py` | 硬體編碼器偵測與 ffmpeg 參數（CBR／VBR） |
 | `frontend/` | Nuxt 4 SPA（`bun run generate` 或 `bun run dev`） |
 | `frontend/.output/public` | 建置後靜態檔，由 Flask 提供 |
 | `pyproject.toml`／`uv.lock` | Python 專案與鎖定依賴（uv） |
 | `requirements.txt` | 傳統 pip 清單（與主要依賴對照） |
-| `start.sh`／`start.bat` | 檢查 `uv`、前端未建置時警告、`uv run app.py` |
+| `start.sh`／`start.bat` | 自動安裝 uv／Bun、建置前端、`uv run app.py` |
 | `build-image.sh` | Docker 映像建置腳本 |
 | `Dockerfile` | 多階段：Bun 前端 + `uv sync` + Python 執行環境 |
 | `userscripts/bili2vrc-bridge.user.js` | 可選油猴腳本（B 站 → bili2vrc） |
@@ -353,8 +388,11 @@ docker run --rm -p 5000:5000 \
 | 上傳失敗（403／簽章錯誤） | 重建 API Token；確認 bucket 名稱與權限 |
 | 完成後沒有 HTTP 網址 | 設定 `R2_PUBLIC_BASE_URL`；在 bucket **Settings → Custom Domains** 綁定網域（或開啟 Public Development URL） |
 | YouTube 獲取格式失敗 | 安裝 Node.js，確認 `node -version` |
-| 找不到 `uv` | 至 [uv 文件](https://docs.astral.sh/uv/getting-started/installation/) 安裝 |
-| 前端空白／找不到頁面 | 執行 `cd frontend && bun install && bun run generate`（啟動腳本僅警告） |
+| 找不到 `uv`／`bun` | 直接跑 `start.bat`／`start.sh`（會裝到 `.uv`／`.bun`），或依官方文件手動安裝 |
+| 前端空白／找不到頁面 | 執行 `cd frontend && bun install && bun run generate` |
 | Bilibili 很慢 | Windows：將 `aria2c.exe` 放在專案根目錄；或安裝 aria2 至 `PATH` |
 | 過期檔案仍在 bucket | 程式需持續運行才會清理；或等下一個掃描週期 |
 | VRChat 無法播放／不能 seek | 開啟 **VRChat 相容模式**；確認已設 `R2_PUBLIC_BASE_URL` |
+| 倍速後檔案異常變大 | 改用 **CBR** 或較低 VBR 上限／品質；確認碼率選的是自訂預設而非誤用無上限品質模式 |
+| 「貼上」無法讀剪貼簿 | 請用 `http://127.0.0.1:5000` 或 HTTPS；區網 HTTP 請允許後改 Ctrl+V，或手動貼上網址 |
+| 原速是否重編碼？ | 否（除非開相容模式）；下載後仍會做完整性驗證與 faststart |
