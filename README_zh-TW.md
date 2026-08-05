@@ -347,6 +347,7 @@ docker run --rm -p 5000:5000 \
 | `PORT` | `5000` | HTTP 連接埠 |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt 靜態輸出目錄 |
 | `HW_ENCODER` | `auto` | `auto`、`libx264`、`h264_qsv`、`h264_nvenc` 等 |
+| `DISABLE_HW_ACCEL` | 關閉 | `1` / `true` 強制僅用軟體編碼/解碼 |
 | `LOG_LEVEL` | `INFO` | 日誌級別 |
 | `DISABLE_ARIA2C` | 關閉 | `1` / `true` 停用 aria2c |
 | `COOKIE_MAX_BYTES` | `65536` | 單次 Cookie 上限 |

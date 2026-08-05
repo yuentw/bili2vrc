@@ -20,6 +20,7 @@ def hwaccel_status_route(codec: str | None = Query(default=None)):
         "available": probe.available,
         "smoke_failures": probe.smoke_failures,
         "decode_hwaccel": hwaccel.decode_hwaccel_args(encoder),
+        "hw_accel_disabled": config.DISABLE_HW_ACCEL,
         "gpus": probe.gpus,
         "note": probe.note,
     }

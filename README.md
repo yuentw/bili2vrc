@@ -347,6 +347,7 @@ A **background thread** in this app scans the bucket every `R2_CLEANUP_INTERVAL`
 | `PORT` | `5000` | HTTP port |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt static output directory |
 | `HW_ENCODER` | `auto` | `auto`, `libx264`, `h264_qsv`, `h264_nvenc`, etc. |
+| `DISABLE_HW_ACCEL` | off | `1` / `true` to force software encode/decode only |
 | `LOG_LEVEL` | `INFO` | Python log level |
 | `DISABLE_ARIA2C` | off | `1` / `true` to disable aria2c |
 | `COOKIE_MAX_BYTES` | `65536` | Max cookie payload per request |

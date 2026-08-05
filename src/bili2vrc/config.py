@@ -161,6 +161,7 @@ def normalize_output_codec(codec, *, compat_mode: bool = False) -> str:
 HOST         = os.environ.get("HOST", "0.0.0.0")
 PORT         = int(os.environ.get("PORT", "5000"))
 HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")
+DISABLE_HW_ACCEL = os.environ.get("DISABLE_HW_ACCEL", "").lower() in ("1", "true", "yes", "on")
 LOG_LEVEL    = os.environ.get("LOG_LEVEL", "INFO")
 COOKIE_MAX_BYTES = int(os.environ.get("COOKIE_MAX_BYTES", "65536"))
 DISABLE_ARIA2C   = os.environ.get("DISABLE_ARIA2C", "").lower() in ("1", "true", "yes", "on")

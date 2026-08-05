@@ -351,6 +351,8 @@ def _platform_key() -> str:
 
 def decode_hwaccel_args(encoder: VideoEncoder | None = None) -> list[str]:
     """Args inserted before -i for GPU decode."""
+    if config.DISABLE_HW_ACCEL:
+        return []
     if encoder and _is_qsv_encoder(encoder.name):
         return []
     return list(PLATFORM_HWACCEL_DECODE.get(_platform_key(), ["-hwaccel", "auto"]))
@@ -531,8 +533,17 @@ def detect_video_encoder(output_codec: str | None = None) -> VideoEncoder:
 def probe_video_encoder(output_codec: str | None = None) -> ProbeResult:
     codec = config.normalize_output_codec(output_codec)
     gpus = list_gpus()
-    forced = (config.HW_ENCODER or "auto").strip().lower()
     sw_name = SOFTWARE_ENCODERS[codec]
+
+    if config.DISABLE_HW_ACCEL:
+        forced = (config.HW_ENCODER or "auto").strip().lower()
+        note = "已設定 DISABLE_HW_ACCEL，使用軟體編碼"
+        if forced and forced != "auto" and forced != sw_name:
+            note = f"{note}（忽略 HW_ENCODER={forced}）"
+        logger.info("hw accel disabled: using %s for codec=%s", sw_name, codec)
+        return _software_fallback_result(codec, gpus=gpus, note=note)
+
+    forced = (config.HW_ENCODER or "auto").strip().lower()
 
     if forced and forced != "auto":
         if forced not in ENCODER_PRESETS:
