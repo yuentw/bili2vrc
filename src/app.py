@@ -594,7 +594,8 @@ def _transcode_h264_try(
             "transcode start: encoder=%s speed=%sx bitrate=%skbps fps_in=%.3f fps_out=%s audio=%s src=%s",
             encoder.name, speed, bitrate_kbps, source_fps or 0, out_fps,
             has_audio, os.path.basename(src),
-        )        ok, err_tail = _run_ffmpeg_transcode(
+        )
+        ok, err_tail = _run_ffmpeg_transcode(
             cmd,
             step=step,
             emit_msg=emit_msg,
