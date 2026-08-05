@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bili2vrc Bridge
 // @namespace    https://github.com/yuentw/bili2vrc
-// @version      1.0.5
+// @version      1.0.6
 // @description  Bilibili 封面懸浮「下載解析」→ 開啟 bili2vrc 並自動填入網址、獲取格式
 // @author       bili2vrc
 // @match        https://www.bilibili.com/*
@@ -24,6 +24,23 @@
   const FIXED_ID = 'b2v-fixed-btn';
   const HOST_ATTR = 'data-b2v-host';
 
+  // Never touch Bilibili top nav / channel header (setting position here can hide the bar)
+  const HEADER_EXCLUDE = [
+    '#biliMainHeader',
+    '#bili-header-container',
+    '#internationalHeader',
+    '.bili-header',
+    '.bili-header-m',
+    '.fixed-header',
+    '.mini-header',
+    '.international-header',
+    '.header-channel',
+    '.header-channel-fixed',
+    '.biliMainHeaderWrapper',
+    'header',
+    'nav',
+  ].join(', ');
+
   // Only thumbnail/cover containers — never title/info text links
   const COVER_SELECTORS = [
     '.video-card .pic-box',
@@ -34,7 +51,6 @@
     '.bili-cover-card__thumbnail',
     '.small-item .cover',
     '.card-pic',
-    '.cover-container',
     '.list-item .cover',
     '.bili-dyn-card-video__cover',
     // Watch page — right-rail related / next-play
@@ -113,10 +129,12 @@
     '.bili-video-card__info--right',
     '.bili-video-card__info--tit',
     '.video-card__info',
-    '.info',
-    '.title',
     '.up-info',
   ].join(', ');
+
+  function inHeader(element) {
+    return Boolean(element?.closest?.(HEADER_EXCLUDE));
+  }
 
   function getBaseUrl() {
     const saved = (typeof GM_getValue === 'function' ? GM_getValue(STORAGE_KEY, '') : '') || '';
@@ -148,6 +166,7 @@
 
   function findBvidNear(element) {
     if (!(element instanceof Element)) return null;
+    if (inHeader(element)) return null;
 
     const link =
       (element.matches?.('a[href]') && element) ||
@@ -180,6 +199,7 @@
       ].join(', '),
     );
     if (card) {
+      if (inHeader(card)) return null;
       const dataBvid =
         card.getAttribute('data-bvid') ||
         card.querySelector?.('[data-bvid]')?.getAttribute('data-bvid');
@@ -189,7 +209,6 @@
       );
       const nestedBvid = extractBvid(nested?.href || nested?.getAttribute('href') || '');
       if (nestedBvid) return nestedBvid;
-      // Favlist / related rail sometimes put BV only in title link
       const titleLink = card.querySelector(
         '.bili-video-card__title a[href], .title a[href], a.title[href], .info a[href]',
       );
@@ -203,20 +222,19 @@
 
   function isCoverHost(element) {
     if (!(element instanceof Element)) return false;
+    if (inHeader(element)) return false;
     // Never attach on title / stats / uploader text areas
     if (element.closest(TITLE_OR_INFO_SELECTOR) && !element.matches(COVER_SELECTORS.join(', '))) {
       return false;
     }
-    if (element.matches(COVER_SELECTORS.join(', '))) return true;
-    const className = String(element.className || '');
-    if (/pic-box|__image|__cover|card-pic|cover-container|dyn-card-video__cover|bili-cover-card|(^|\s)cover(\s|$)/i.test(className)) {
-      return Boolean(element.querySelector('img') || element.matches('img') || element.querySelector('picture') || element.matches('a'));
-    }
-    return false;
+    // Strict: only known cover selectors (no broad __image / cover-container fallback)
+    return element.matches(COVER_SELECTORS.join(', '));
   }
 
   function ensureHostPosition(host) {
-    if (window.getComputedStyle(host).position === 'static') {
+    // Only promote static → relative; never override fixed/sticky (header uses those)
+    const position = window.getComputedStyle(host).position;
+    if (position === 'static') {
       host.style.position = 'relative';
     }
     host.setAttribute(HOST_ATTR, '1');
@@ -224,6 +242,7 @@
 
   function attachCoverButton(host) {
     if (!(host instanceof Element)) return;
+    if (inHeader(host)) return;
     if (!isCoverHost(host)) return;
     if (host.querySelector(`:scope > .${BTN_CLASS}`)) return;
     // Avoid nested buttons on cover > a.bili-cover-card > thumbnail
@@ -250,8 +269,12 @@
   function removeStrayButtons() {
     document.querySelectorAll(`.${BTN_CLASS}`).forEach((btn) => {
       const host = btn.parentElement;
-      if (!host || !isCoverHost(host)) {
+      if (!host || inHeader(host) || !isCoverHost(host)) {
         btn.remove();
+        if (host?.hasAttribute?.(HOST_ATTR) && !host.querySelector(`.${BTN_CLASS}`)) {
+          host.removeAttribute(HOST_ATTR);
+          if (host.style.position === 'relative') host.style.position = '';
+        }
       }
     });
   }
@@ -259,6 +282,7 @@
   function scanFavlistCovers(root = document) {
     FAV_ITEM_SELECTORS.forEach((itemSel) => {
       root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        if (inHeader(item)) return;
         const cover = item.querySelector(FAV_COVER_INNER);
         if (cover) attachCoverButton(cover);
       });
@@ -268,6 +292,7 @@
   function scanHistoryCovers(root = document) {
     HISTORY_ITEM_SELECTORS.forEach((itemSel) => {
       root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        if (inHeader(item)) return;
         const cover =
           item.querySelector('.bili-cover-card') ||
           item.querySelector(HISTORY_COVER_INNER);
@@ -279,6 +304,7 @@
   function scanRelatedCovers(root = document) {
     RELATED_ITEM_SELECTORS.forEach((itemSel) => {
       root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        if (inHeader(item)) return;
         const cover = item.querySelector(RELATED_COVER_INNER);
         if (cover) attachCoverButton(cover);
       });
@@ -288,7 +314,9 @@
   function scanCovers(root = document) {
     removeStrayButtons();
     COVER_SELECTORS.forEach((selector) => {
-      root.querySelectorAll?.(selector)?.forEach((el) => attachCoverButton(el));
+      root.querySelectorAll?.(selector)?.forEach((el) => {
+        if (!inHeader(el)) attachCoverButton(el);
+      });
     });
     scanFavlistCovers(root);
     scanHistoryCovers(root);
@@ -313,7 +341,25 @@
       event.stopPropagation();
       openInBili2vrc(videoUrlFromBvid(pathBvid));
     });
-    document.documentElement.appendChild(btn);
+    (document.body || document.documentElement).appendChild(btn);
+  }
+
+  function isOurNode(node) {
+    return (
+      node instanceof Element &&
+      (node.id === FIXED_ID ||
+        node.classList?.contains(BTN_CLASS) ||
+        node.hasAttribute?.(HOST_ATTR))
+    );
+  }
+
+  function mutationsAreOurs(mutations) {
+    if (!mutations?.length) return false;
+    return mutations.every((mutation) => {
+      const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
+      if (!nodes.length) return mutation.type === 'attributes' && isOurNode(mutation.target);
+      return nodes.every((node) => isOurNode(node) || (node.parentElement && isOurNode(node.parentElement)));
+    });
   }
 
   function debounce(fn, waitMs) {
@@ -362,7 +408,6 @@
       .items__item:hover .${BTN_CLASS},
       .fav-video-list li:hover .${BTN_CLASS},
       .fav-list-main .items__item:hover .${BTN_CLASS},
-      [class*="cover"]:hover .${BTN_CLASS},
       .pic-box:hover .${BTN_CLASS} {
         opacity: 1 !important;
       }
@@ -410,14 +455,16 @@
     scanCovers();
     ensureWatchPageButton();
 
-    const rescan = debounce(() => {
+    const rescan = debounce((mutations) => {
+      if (mutationsAreOurs(mutations)) return;
       scanCovers();
       ensureWatchPageButton();
-    }, 200);
+    }, 250);
 
     const observer = new MutationObserver(rescan);
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener('scroll', rescan, { passive: true });
+    const root = document.body || document.documentElement;
+    observer.observe(root, { childList: true, subtree: true });
+    window.addEventListener('scroll', () => rescan(), { passive: true });
 
     let lastHref = location.href;
     setInterval(() => {
