@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bili2vrc Bridge
 // @namespace    https://github.com/yuentw/bili2vrc
-// @version      1.0.7
+// @version      1.0.8
 // @description  Bilibili 封面懸浮「下載解析」→ 開啟 bili2vrc 並自動填入網址、獲取格式
 // @author       bili2vrc
 // @match        https://www.bilibili.com/*
@@ -338,19 +338,25 @@
       document.getElementById(FIXED_ID)?.remove();
       return;
     }
-    if (document.getElementById(FIXED_ID)) return;
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = FIXED_ID;
-    btn.textContent = '下載解析';
-    btn.title = '在 bili2vrc 開啟並獲取格式';
-    btn.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openInBili2vrc(videoUrlFromBvid(pathBvid));
-    });
-    (document.body || document.documentElement).appendChild(btn);
+    let btn = document.getElementById(FIXED_ID);
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = FIXED_ID;
+      btn.textContent = '下載解析';
+      btn.title = '在 bili2vrc 開啟並獲取格式';
+      // Always resolve BV from the live URL at click time (SPA next-video safe).
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const liveBvid = extractBvid(location.pathname + location.search);
+        if (!liveBvid) return;
+        openInBili2vrc(videoUrlFromBvid(liveBvid));
+      });
+      (document.body || document.documentElement).appendChild(btn);
+    }
+    btn.dataset.bvid = pathBvid;
   }
 
   function isOurNode(node) {
