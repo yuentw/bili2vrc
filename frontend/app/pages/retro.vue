@@ -305,6 +305,26 @@ function copyRetroUrl() {
                   </select>
                 </div>
                 <div class="field-col">
+                  <label class="xp-label" for="outputCodec">輸出編碼（重新編碼時）:</label>
+                  <select
+                    class="xp-select"
+                    id="outputCodec"
+                    v-model="app.outputCodec"
+                    :disabled="app.compatMode"
+                  >
+                    <option
+                      v-for="option in app.outputCodecOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                  <div v-if="app.compatMode" class="field-hint">
+                    VRChat 相容模式固定使用 H.264
+                  </div>
+                </div>
+                <div class="field-col">
                   <label class="xp-label" for="encodeMode">編碼模式（重新編碼時）:</label>
                   <select class="xp-select" id="encodeMode" v-model="app.encodeMode">
                     <option

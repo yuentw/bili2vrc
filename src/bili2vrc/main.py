@@ -19,8 +19,11 @@ logger = logging.getLogger("bili2vrchat")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    encoder = hwaccel.get_video_encoder()
-    logger.info("video encoder: %s (%s)", encoder.label, encoder.name)
+    encoder = hwaccel.get_video_encoder(config.DEFAULT_OUTPUT_CODEC)
+    logger.info(
+        "video encoder (default %s): %s (%s)",
+        config.DEFAULT_OUTPUT_CODEC, encoder.label, encoder.name,
+    )
     warn_if_frontend_missing()
     start_r2_cleanup_thread()
     yield

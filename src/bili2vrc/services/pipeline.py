@@ -13,7 +13,7 @@ from bili2vrc.constants import YTDLP_JS_ARGS, clamp_playback_speed
 from bili2vrc.download.cookies import get_cookie_args
 from bili2vrc.download.ytdlp import get_aria2c_cmd, should_use_aria2c
 from bili2vrc.media.mp4 import apply_faststart, verify_mp4
-from bili2vrc.media.transcode import transcode_h264
+from bili2vrc.media.transcode import transcode_video
 from bili2vrc.services.process_controller import process_controller
 from bili2vrc.storage import r2
 from bili2vrc.utils.formatting import format_size
@@ -33,6 +33,7 @@ def run_process(
     encode_quality: str,
     encode_mode: str,
     scale_bitrate_with_speed: bool,
+    output_codec: str,
     cookie_path: str | None,
     job_id: str,
     cancel_event: threading.Event,
@@ -192,6 +193,7 @@ def run_process(
 
         speed = clamp_playback_speed(playback_speed)
         needs_transcode = compat_mode or abs(speed - 1.0) > 1e-6
+        effective_codec = config.normalize_output_codec(output_codec, compat_mode=compat_mode)
 
         if needs_transcode:
             if compat_mode and abs(speed - 1.0) > 1e-6:
@@ -203,10 +205,11 @@ def run_process(
 
             suffix = "_compat.mp4" if compat_mode else "_stretch.mp4"
             out_path = output_path.replace(".mp4", suffix)
-            ok = transcode_h264(
+            ok = transcode_video(
                 output_path,
                 out_path,
                 emit,
+                output_codec=effective_codec,
                 playback_speed=speed,
                 bitrate_kbps=bitrate_kbps,
                 encode_quality=encode_quality,

@@ -20,7 +20,14 @@ export function useBili2Vrc() {
   const sourceBitrateKbps = ref<number | null>(null)
   const encodeQuality = ref('balanced')
   const encodeMode = ref('vbr')
+  const outputCodec = ref('av1')
   const compatMode = ref(false)
+  const outputCodecOptions = [
+    { value: 'av1', label: 'AV1（預設，檔案較小）' },
+    { value: 'h264', label: 'H.264（相容性最佳）' },
+    { value: 'h265', label: 'H.265 / HEVC' },
+  ]
+  const effectiveOutputCodec = computed(() => (compatMode.value ? 'h264' : outputCodec.value))
   const vbrBitratePresets = [1500, 2000, 3000, 4000, 5000, 8000]
   const cbrBitratePresets = [2000, 4000, 5000, 6000, 8000, 10000]
   const encodeModeOptions = [
@@ -140,22 +147,31 @@ export function useBili2Vrc() {
 
   async function loadHwaccelStatus() {
     try {
-      const response = await fetch('/api/hwaccel-status')
+      const response = await fetch(
+        `/api/hwaccel-status?codec=${encodeURIComponent(effectiveOutputCodec.value)}`,
+      )
       const data = await response.json()
       const note = typeof data.note === 'string' && data.note ? ` — ${data.note}` : ''
+      const codecLabel = typeof data.output_codec_label === 'string' && data.output_codec_label
+        ? data.output_codec_label
+        : effectiveOutputCodec.value.toUpperCase()
       if (data.fallback) {
-        hwEncoderLabel.value = `編碼器：${data.label}${note}`
+        hwEncoderLabel.value = `輸出 ${codecLabel} · ${data.label}${note}`
       } else {
         const decode = Array.isArray(data.decode_hwaccel)
           ? data.decode_hwaccel.filter((part: string) => part !== '-hwaccel').join('/')
           : ''
         const decodeHint = decode ? ` · 解碼 ${decode}` : ''
-        hwEncoderLabel.value = `編碼器：${data.label}${decodeHint}${note}`
+        hwEncoderLabel.value = `輸出 ${codecLabel} · ${data.label}${decodeHint}${note}`
       }
     } catch {
       hwEncoderLabel.value = '編碼器：未知'
     }
   }
+
+  watch([outputCodec, compatMode], () => {
+    loadHwaccelStatus()
+  })
 
   function resetFormatTable(message: string, isError = false) {
     allFormats.value = []
@@ -382,6 +398,7 @@ export function useBili2Vrc() {
             bitrate_kbps: Number(bitrateKbps.value) || 3000,
             encode_quality: encodeQuality.value || 'balanced',
             encode_mode: encodeMode.value || 'vbr',
+            output_codec: effectiveOutputCodec.value,
             scale_bitrate_with_speed: scaleBitrateWithSpeed.value,
           }),
         ),
@@ -534,6 +551,9 @@ export function useBili2Vrc() {
     scaleBitrateWithSpeed,
     encodeMode,
     encodeModeOptions,
+    outputCodec,
+    outputCodecOptions,
+    effectiveOutputCodec,
     encodeQuality,
     encodeQualityOptions,
     compatMode,

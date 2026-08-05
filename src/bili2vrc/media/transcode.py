@@ -1,4 +1,4 @@
-"""ffmpeg H.264 transcode with optional speed stretch."""
+"""ffmpeg video transcode with optional speed stretch (AV1 / H.264 / H.265)."""
 
 import logging
 import os
@@ -78,11 +78,12 @@ def _run_ffmpeg_transcode(
         return False, str(exc)
 
 
-def transcode_h264(
+def transcode_video(
     src: str,
     dst: str,
     emit_fn,
     *,
+    output_codec: str | None = None,
     playback_speed: float = 1.0,
     bitrate_kbps: int | None = None,
     encode_quality: str | None = None,
@@ -91,6 +92,8 @@ def transcode_h264(
     cancel_event: threading.Event | None = None,
     register_proc=None,
 ) -> bool:
+    codec = config.normalize_output_codec(output_codec)
+    codec_label = config.OUTPUT_CODEC_LABELS.get(codec, codec.upper())
     speed = clamp_playback_speed(float(playback_speed))
     quality = config.normalize_encode_quality(encode_quality)
     mode = config.normalize_encode_mode(encode_mode)
@@ -103,26 +106,24 @@ def transcode_h264(
         video_bitrate = base_bitrate
     if video_bitrate != base_bitrate:
         logger.info(
-            "bitrate for speed: base=%skbps × %sx → %skbps (mode=%s quality=%s)",
-            base_bitrate, speed, video_bitrate, mode, quality,
+            "bitrate for speed: base=%skbps × %sx → %skbps (codec=%s mode=%s quality=%s)",
+            base_bitrate, speed, video_bitrate, codec, mode, quality,
         )
     elif abs(speed - 1.0) > 1e-6 and not scale_bitrate_with_speed:
         logger.info(
-            "bitrate speed scale skipped: %skbps (mode=%s quality=%s)",
-            base_bitrate, mode, quality,
+            "bitrate speed scale skipped: %skbps (codec=%s mode=%s quality=%s)",
+            base_bitrate, codec, mode, quality,
         )
     has_audio = probe_has_audio(src)
     source_fps = hwaccel.probe_video_fps(src)
     step = "stretch" if abs(speed - 1.0) > 1e-6 else "reencode"
+    encoders_to_try = hwaccel.get_encoders_to_try(codec)
 
-    encoders_to_try = [hwaccel.get_video_encoder()]
-    if encoders_to_try[0].name != "libx264":
-        encoders_to_try.append(hwaccel.software_encoder())
-
-    return _transcode_h264_try(
+    return _transcode_video_try(
         src,
         dst,
         emit_fn,
+        codec_label=codec_label,
         speed=speed,
         has_audio=has_audio,
         source_fps=source_fps,
@@ -136,11 +137,22 @@ def transcode_h264(
     )
 
 
-def _transcode_h264_try(
+def transcode_h264(
+    src: str,
+    dst: str,
+    emit_fn,
+    **kwargs,
+) -> bool:
+    """Backward-compatible wrapper."""
+    return transcode_video(src, dst, emit_fn, output_codec="h264", **kwargs)
+
+
+def _transcode_video_try(
     src: str,
     dst: str,
     emit_fn,
     *,
+    codec_label: str,
     speed: float,
     has_audio: bool,
     source_fps: float,
@@ -163,9 +175,9 @@ def _transcode_h264_try(
             emit_fn(step, f"{encoders[index - 1].label} 失敗，改用 {encoder.label}…")
 
         if abs(speed - 1.0) > 1e-6:
-            emit_msg = f"時間拉伸 {speed}x + H.264 ({encoder.label})..."
+            emit_msg = f"時間拉伸 {speed}x + {codec_label} ({encoder.label})..."
         else:
-            emit_msg = f"重新編碼 H.264 ({encoder.label})..."
+            emit_msg = f"重新編碼 {codec_label} ({encoder.label})..."
         emit_fn(step, emit_msg)
 
         video_filter = hwaccel.compose_video_filter(
@@ -201,7 +213,7 @@ def _transcode_h264_try(
             video_args += ["-bf", "0"]
 
         cmd += ["-c:v", encoder.name, *video_args]
-        if speed_changed or encoder.name == "h264_qsv":
+        if speed_changed or encoder.name.endswith("_qsv"):
             cmd += ["-r", str(out_fps), "-fps_mode", "cfr"]
         if has_audio:
             cmd += ["-c:a", "aac", "-b:a", "192k"]

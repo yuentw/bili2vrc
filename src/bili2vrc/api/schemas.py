@@ -17,6 +17,7 @@ class ProcessRequest(BaseModel):
     encode_quality: str | None = None
     encode_mode: str | None = None
     scale_bitrate_with_speed: bool | None = None
+    output_codec: str | None = None
     cookie_content: str | None = None
 
 

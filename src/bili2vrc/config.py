@@ -135,6 +135,29 @@ def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
     return clamp_bitrate_kbps(int(round(base * speed * factor)))
 
 
+OUTPUT_CODECS = ("av1", "h264", "h265")
+DEFAULT_OUTPUT_CODEC = os.environ.get("DEFAULT_OUTPUT_CODEC", "av1").strip().lower()
+if DEFAULT_OUTPUT_CODEC not in OUTPUT_CODECS:
+    DEFAULT_OUTPUT_CODEC = "av1"
+
+OUTPUT_CODEC_LABELS = {
+    "av1": "AV1",
+    "h264": "H.264",
+    "h265": "H.265",
+}
+
+
+def normalize_output_codec(codec, *, compat_mode: bool = False) -> str:
+    if compat_mode:
+        return "h264"
+    key = str(codec or DEFAULT_OUTPUT_CODEC).strip().lower()
+    if key in ("hevc", "h265"):
+        return "h265"
+    if key in OUTPUT_CODECS:
+        return key
+    return DEFAULT_OUTPUT_CODEC
+
+
 HOST         = os.environ.get("HOST", "0.0.0.0")
 PORT         = int(os.environ.get("PORT", "5000"))
 HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")
