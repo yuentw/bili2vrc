@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bili2vrc Bridge
 // @namespace    https://github.com/yuentw/bili2vrc
-// @version      1.0.5
+// @version      1.0.8
 // @description  Bilibili 封面懸浮「下載解析」→ 開啟 bili2vrc 並自動填入網址、獲取格式
 // @author       bili2vrc
 // @match        https://www.bilibili.com/*
@@ -24,7 +24,41 @@
   const FIXED_ID = 'b2v-fixed-btn';
   const HOST_ATTR = 'data-b2v-host';
 
-  // Only thumbnail/cover containers — never title/info text links
+  // Never touch Bilibili top nav mount point / channel header
+  const HEADER_EXCLUDE = [
+    '#biliMainHeader',
+    '#bili-header-container',
+    '#internationalHeader',
+    '.bili-header',
+    '.bili-header-m',
+    '.fixed-header',
+    '.mini-header',
+    '.international-header',
+    '.header-channel',
+    '.header-channel-fixed',
+    '.biliMainHeaderWrapper',
+    'header',
+    'nav',
+  ].join(', ');
+
+  // Observe only content regions — never #app/#biliMainHeader/body (breaks header micro-frontend)
+  const OBSERVE_ROOT_SELECTORS = [
+    '#mirror-vdcon',
+    '.recommend-list-v1',
+    '.recommend-list-container',
+    '#reco_list',
+    '.right-container',
+    '.fav-list-main',
+    '.fav-video-list',
+    '.section-cards',
+    '.video-list',
+    '.feed-card',
+    '.bili-feed4-layout',
+    '.search-content',
+    '.bili-video-card__wrap',
+    '.video-page-card-small',
+  ];
+
   const COVER_SELECTORS = [
     '.video-card .pic-box',
     '.bili-video-card .bili-video-card__image',
@@ -34,10 +68,8 @@
     '.bili-cover-card__thumbnail',
     '.small-item .cover',
     '.card-pic',
-    '.cover-container',
     '.list-item .cover',
     '.bili-dyn-card-video__cover',
-    // Watch page — right-rail related / next-play
     '.video-page-card-small .pic-box',
     '.video-page-card-small .card-box .pic-box',
     '.video-page-operator-card-small .pic-box',
@@ -46,19 +78,16 @@
     '.recommend-list-container .pic-box',
     '#reco_list .pic-box',
     '.right-container .pic-box',
-    // History — www.bilibili.com/history
     '.history-card .bili-video-card__cover',
     '.history-card .bili-cover-card',
     '.history-card .bili-cover-card__thumbnail',
     '.section-cards .bili-cover-card',
-    // Favorites — new UI (space.bilibili.com/*/favlist)
     '.fav-list-main .bili-video-card__image',
     '.fav-list-main .bili-video-card__image--wrap',
     '.fav-list-main .bili-cover-card',
     '.items__item .bili-video-card__image',
     '.items__item .bili-video-card__image--wrap',
     '.items__item .bili-cover-card',
-    // Favorites — legacy UI
     '.fav-video-list .cover',
     '.fav-video-list li > a.cover',
     'ul.fav-video-list .cover',
@@ -113,10 +142,12 @@
     '.bili-video-card__info--right',
     '.bili-video-card__info--tit',
     '.video-card__info',
-    '.info',
-    '.title',
     '.up-info',
   ].join(', ');
+
+  function inHeader(element) {
+    return Boolean(element?.closest?.(HEADER_EXCLUDE));
+  }
 
   function getBaseUrl() {
     const saved = (typeof GM_getValue === 'function' ? GM_getValue(STORAGE_KEY, '') : '') || '';
@@ -148,6 +179,7 @@
 
   function findBvidNear(element) {
     if (!(element instanceof Element)) return null;
+    if (inHeader(element)) return null;
 
     const link =
       (element.matches?.('a[href]') && element) ||
@@ -180,6 +212,7 @@
       ].join(', '),
     );
     if (card) {
+      if (inHeader(card)) return null;
       const dataBvid =
         card.getAttribute('data-bvid') ||
         card.querySelector?.('[data-bvid]')?.getAttribute('data-bvid');
@@ -189,7 +222,6 @@
       );
       const nestedBvid = extractBvid(nested?.href || nested?.getAttribute('href') || '');
       if (nestedBvid) return nestedBvid;
-      // Favlist / related rail sometimes put BV only in title link
       const titleLink = card.querySelector(
         '.bili-video-card__title a[href], .title a[href], a.title[href], .info a[href]',
       );
@@ -203,20 +235,16 @@
 
   function isCoverHost(element) {
     if (!(element instanceof Element)) return false;
-    // Never attach on title / stats / uploader text areas
+    if (inHeader(element)) return false;
     if (element.closest(TITLE_OR_INFO_SELECTOR) && !element.matches(COVER_SELECTORS.join(', '))) {
       return false;
     }
-    if (element.matches(COVER_SELECTORS.join(', '))) return true;
-    const className = String(element.className || '');
-    if (/pic-box|__image|__cover|card-pic|cover-container|dyn-card-video__cover|bili-cover-card|(^|\s)cover(\s|$)/i.test(className)) {
-      return Boolean(element.querySelector('img') || element.matches('img') || element.querySelector('picture') || element.matches('a'));
-    }
-    return false;
+    return element.matches(COVER_SELECTORS.join(', '));
   }
 
   function ensureHostPosition(host) {
-    if (window.getComputedStyle(host).position === 'static') {
+    const position = window.getComputedStyle(host).position;
+    if (position === 'static') {
       host.style.position = 'relative';
     }
     host.setAttribute(HOST_ATTR, '1');
@@ -224,9 +252,9 @@
 
   function attachCoverButton(host) {
     if (!(host instanceof Element)) return;
+    if (inHeader(host)) return;
     if (!isCoverHost(host)) return;
     if (host.querySelector(`:scope > .${BTN_CLASS}`)) return;
-    // Avoid nested buttons on cover > a.bili-cover-card > thumbnail
     if (host.parentElement?.closest(`[${HOST_ATTR}]`)) return;
 
     const bvid = findBvidNear(host);
@@ -250,8 +278,12 @@
   function removeStrayButtons() {
     document.querySelectorAll(`.${BTN_CLASS}`).forEach((btn) => {
       const host = btn.parentElement;
-      if (!host || !isCoverHost(host)) {
+      if (!host || inHeader(host) || !isCoverHost(host)) {
         btn.remove();
+        if (host?.hasAttribute?.(HOST_ATTR) && !host.querySelector(`.${BTN_CLASS}`)) {
+          host.removeAttribute(HOST_ATTR);
+          if (host.style.position === 'relative') host.style.position = '';
+        }
       }
     });
   }
@@ -259,6 +291,7 @@
   function scanFavlistCovers(root = document) {
     FAV_ITEM_SELECTORS.forEach((itemSel) => {
       root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        if (inHeader(item)) return;
         const cover = item.querySelector(FAV_COVER_INNER);
         if (cover) attachCoverButton(cover);
       });
@@ -268,6 +301,7 @@
   function scanHistoryCovers(root = document) {
     HISTORY_ITEM_SELECTORS.forEach((itemSel) => {
       root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        if (inHeader(item)) return;
         const cover =
           item.querySelector('.bili-cover-card') ||
           item.querySelector(HISTORY_COVER_INNER);
@@ -279,6 +313,7 @@
   function scanRelatedCovers(root = document) {
     RELATED_ITEM_SELECTORS.forEach((itemSel) => {
       root.querySelectorAll?.(itemSel)?.forEach((item) => {
+        if (inHeader(item)) return;
         const cover = item.querySelector(RELATED_COVER_INNER);
         if (cover) attachCoverButton(cover);
       });
@@ -288,7 +323,9 @@
   function scanCovers(root = document) {
     removeStrayButtons();
     COVER_SELECTORS.forEach((selector) => {
-      root.querySelectorAll?.(selector)?.forEach((el) => attachCoverButton(el));
+      root.querySelectorAll?.(selector)?.forEach((el) => {
+        if (!inHeader(el)) attachCoverButton(el);
+      });
     });
     scanFavlistCovers(root);
     scanHistoryCovers(root);
@@ -301,19 +338,49 @@
       document.getElementById(FIXED_ID)?.remove();
       return;
     }
-    if (document.getElementById(FIXED_ID)) return;
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = FIXED_ID;
-    btn.textContent = '下載解析';
-    btn.title = '在 bili2vrc 開啟並獲取格式';
-    btn.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      openInBili2vrc(videoUrlFromBvid(pathBvid));
+    let btn = document.getElementById(FIXED_ID);
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = FIXED_ID;
+      btn.textContent = '下載解析';
+      btn.title = '在 bili2vrc 開啟並獲取格式';
+      // Always resolve BV from the live URL at click time (SPA next-video safe).
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const liveBvid = extractBvid(location.pathname + location.search);
+        if (!liveBvid) return;
+        openInBili2vrc(videoUrlFromBvid(liveBvid));
+      });
+      (document.body || document.documentElement).appendChild(btn);
+    }
+    btn.dataset.bvid = pathBvid;
+  }
+
+  function isOurNode(node) {
+    return (
+      node instanceof Element &&
+      (node.id === FIXED_ID ||
+        node.classList?.contains(BTN_CLASS) ||
+        node.hasAttribute?.(HOST_ATTR))
+    );
+  }
+
+  function mutationsAreOurs(mutations) {
+    if (!mutations?.length) return false;
+    return mutations.every((mutation) => {
+      const nodes = [...mutation.addedNodes, ...mutation.removedNodes];
+      if (!nodes.length) {
+        return mutation.type === 'attributes' && isOurNode(mutation.target);
+      }
+      return nodes.every(
+        (node) =>
+          isOurNode(node) ||
+          (node.parentElement && isOurNode(node.parentElement)),
+      );
     });
-    document.documentElement.appendChild(btn);
   }
 
   function debounce(fn, waitMs) {
@@ -362,7 +429,6 @@
       .items__item:hover .${BTN_CLASS},
       .fav-video-list li:hover .${BTN_CLASS},
       .fav-list-main .items__item:hover .${BTN_CLASS},
-      [class*="cover"]:hover .${BTN_CLASS},
       .pic-box:hover .${BTN_CLASS} {
         opacity: 1 !important;
       }
@@ -404,33 +470,113 @@
     });
   }
 
-  function init() {
+  function headerReady() {
+    const mount = document.getElementById('biliMainHeader');
+    if (!mount) return true; // pages without this mount
+    return Boolean(mount.querySelector('.bili-header, .bili-header__bar, .mini-header'));
+  }
+
+  function waitForHeader(timeoutMs = 8000) {
+    return new Promise((resolve) => {
+      if (headerReady()) {
+        resolve(true);
+        return;
+      }
+      const started = Date.now();
+      const timer = window.setInterval(() => {
+        if (headerReady() || Date.now() - started > timeoutMs) {
+          window.clearInterval(timer);
+          resolve(headerReady());
+        }
+      }, 100);
+    });
+  }
+
+  function collectObserveRoots() {
+    const roots = [];
+    const seen = new Set();
+    OBSERVE_ROOT_SELECTORS.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((el) => {
+        if (inHeader(el) || seen.has(el)) return;
+        // Never observe the header mount itself
+        if (el.id === 'biliMainHeader') return;
+        seen.add(el);
+        roots.push(el);
+      });
+    });
+    return roots;
+  }
+
+  function startObservers(rescan) {
+    const observers = [];
+    const attach = (root) => {
+      const observer = new MutationObserver((mutations) => {
+        if (mutationsAreOurs(mutations)) return;
+        // Ignore mutations inside header mount
+        if (mutations.every((m) => inHeader(m.target))) return;
+        rescan();
+      });
+      observer.observe(root, { childList: true, subtree: true });
+      observers.push(observer);
+    };
+
+    collectObserveRoots().forEach(attach);
+
+    // Watch for late-appearing content roots without observing whole body
+    const boot = new MutationObserver(() => {
+      collectObserveRoots().forEach((root) => {
+        if (root.__b2vObserved) return;
+        root.__b2vObserved = true;
+        attach(root);
+        rescan();
+      });
+    });
+    // Only watch direct children of #app / body for new major sections
+    const app = document.getElementById('app') || document.body;
+    if (app) {
+      boot.observe(app, { childList: true, subtree: false });
+      observers.push(boot);
+    }
+    return observers;
+  }
+
+  async function init() {
     injectStyles();
     registerMenu();
-    scanCovers();
-    ensureWatchPageButton();
+
+    // Critical: wait until Bilibili header micro-frontend mounts.
+    // Full-document MutationObserver previously emptied #biliMainHeader.
+    await waitForHeader(8000);
+    // Extra settle time after header appears
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
 
     const rescan = debounce(() => {
       scanCovers();
       ensureWatchPageButton();
-    }, 200);
+    }, 400);
 
-    const observer = new MutationObserver(rescan);
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener('scroll', rescan, { passive: true });
+    scanCovers();
+    ensureWatchPageButton();
+    startObservers(rescan);
+
+    window.addEventListener('scroll', () => rescan(), { passive: true });
 
     let lastHref = location.href;
     setInterval(() => {
       if (location.href !== lastHref) {
         lastHref = location.href;
-        rescan();
+        waitForHeader(5000).then(() => {
+          window.setTimeout(() => rescan(), 300);
+        });
       }
-    }, 800);
+    }, 1000);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
+    document.addEventListener('DOMContentLoaded', () => {
+      void init();
+    }, { once: true });
   } else {
-    init();
+    void init();
   }
 })();
