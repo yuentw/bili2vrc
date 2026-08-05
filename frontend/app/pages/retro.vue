@@ -311,34 +311,29 @@ function copyRetroUrl() {
                   </div>
                 </div>
               </div>
-              <label class="xp-check-label">
-                <input type="checkbox" id="compatMode" v-model="app.compatMode">
-                <span><b>VRChat 相容模式</b> — 重新編碼為 H.264 Main Profile（修復固定時間點撕裂問題，速度較慢）</span>
-              </label>
-
-              <details class="xp-advanced-options">
-                <summary class="xp-advanced-summary">進階編碼選項（預設 H.264）</summary>
-                <div class="field-row">
-                  <div class="field-col">
-                    <label class="xp-label" for="outputCodec">輸出編碼（重新編碼時）:</label>
-                    <select
-                      class="xp-select"
-                      id="outputCodec"
-                      v-model="app.outputCodec"
-                      :disabled="app.compatMode"
+              <div class="field-row">
+                <div class="field-col field-col-full">
+                  <label class="xp-label">輸出模式:</label>
+                  <div class="codec-btn-group output-mode-group" role="group" aria-label="輸出模式">
+                    <button
+                      v-for="option in app.outputModeOptions"
+                      :key="option.value"
+                      type="button"
+                      class="xp-btn codec-btn"
+                      :class="{ active: app.outputMode === option.value }"
+                      :disabled="option.value === 'original' && app.originalModeDisabled"
+                      @click="app.setOutputMode(option.value)"
                     >
-                      <option
-                        v-for="option in app.outputCodecOptions"
-                        :key="option.value"
-                        :value="option.value"
-                      >
-                        {{ option.label }}
-                      </option>
-                    </select>
-                    <div v-if="app.compatMode" class="field-hint">
-                      VRChat 相容模式固定使用 H.264
-                    </div>
+                      {{ option.label }}
+                    </button>
                   </div>
+                  <div class="xp-hint">{{ app.outputModeHint }}</div>
+                </div>
+              </div>
+
+              <details v-if="app.showAdvancedEncoding" class="xp-advanced-options">
+                <summary class="xp-advanced-summary">進階編碼選項</summary>
+                <div class="field-row">
                   <div class="field-col">
                     <label class="xp-label" for="encodeMode">編碼模式（重新編碼時）:</label>
                     <select class="xp-select" id="encodeMode" v-model="app.encodeMode">
@@ -509,5 +504,23 @@ function copyRetroUrl() {
   outline-color: #1a3a80;
   color: white;
   font-weight: bold;
+}
+
+.retro-app :deep(.field-col-full) {
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.retro-app :deep(.output-mode-group) {
+  display: flex;
+  gap: 2px;
+}
+
+.retro-app :deep(.output-mode-group .codec-btn) {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  padding: 2px 6px;
+  min-height: 22px;
 }
 </style>

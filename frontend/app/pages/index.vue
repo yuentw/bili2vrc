@@ -346,31 +346,27 @@ function onResultVideoLoad() {
               </div>
             </div>
             <div class="field field-full">
-              <label class="compat-check">
-                <input type="checkbox" v-model="app.compatMode">
-                <span>相容模式 — 強制編碼為 H.264（確保所有玩家都能播放，較慢）</span>
-              </label>
+              <label>輸出模式</label>
+              <div class="codec-btn-group output-mode-group" role="group" aria-label="輸出模式">
+                <button
+                  v-for="option in app.outputModeOptions"
+                  :key="option.value"
+                  type="button"
+                  class="codec-btn"
+                  :class="{ active: app.outputMode === option.value }"
+                  :disabled="option.value === 'original' && app.originalModeDisabled"
+                  @click="app.setOutputMode(option.value)"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+              <div class="field-hint">{{ app.outputModeHint }}</div>
             </div>
           </div>
 
-          <details class="advanced-options">
-            <summary>進階編碼選項（預設 H.264，多數情況無需調整）</summary>
+          <details v-if="app.showAdvancedEncoding" class="advanced-options">
+            <summary>進階編碼選項</summary>
             <div class="options-grid advanced-options-body">
-              <div class="field">
-                <label>輸出編碼（重新編碼時）</label>
-                <select v-model="app.outputCodec" :disabled="app.compatMode">
-                  <option
-                    v-for="option in app.outputCodecOptions"
-                    :key="option.value"
-                    :value="option.value"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
-                <div v-if="app.compatMode" class="field-hint">
-                  VRChat 相容模式固定使用 H.264
-                </div>
-              </div>
               <div class="field">
                 <label>編碼模式（重新編碼時）</label>
                 <select v-model="app.encodeMode">

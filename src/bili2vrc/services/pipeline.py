@@ -193,18 +193,30 @@ def run_process(
             return
 
         speed = clamp_playback_speed(playback_speed)
-        needs_transcode = compat_mode or abs(speed - 1.0) > 1e-6
         effective_codec = config.normalize_output_codec(output_codec, compat_mode=compat_mode)
+        needs_transcode = (
+            compat_mode
+            or abs(speed - 1.0) > 1e-6
+            or effective_codec == "av1"
+        )
 
         if needs_transcode:
             if compat_mode and abs(speed - 1.0) > 1e-6:
                 emit("reencode", f"VRChat 相容模式 + 時間拉伸 {speed}x...")
             elif compat_mode:
                 emit("reencode", "重新編碼為 H.264 VRChat相容模式...")
-            else:
+            elif abs(speed - 1.0) > 1e-6:
                 emit("stretch", f"時間拉伸 {speed}x（保留音高）...")
+            else:
+                codec_label = "AV1" if effective_codec == "av1" else effective_codec.upper()
+                emit("reencode", f"重新編碼為 {codec_label}...")
 
-            suffix = "_compat.mp4" if compat_mode else "_stretch.mp4"
+            if compat_mode:
+                suffix = "_compat.mp4"
+            elif abs(speed - 1.0) > 1e-6:
+                suffix = "_stretch.mp4"
+            else:
+                suffix = f"_{effective_codec}.mp4"
             out_path = output_path.replace(".mp4", suffix)
             ok = transcode_video(
                 output_path,

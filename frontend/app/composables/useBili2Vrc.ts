@@ -32,15 +32,34 @@ export function useBili2Vrc() {
   const sourceBitrateKbps = ref<number | null>(null)
   const encodeQuality = ref('balanced')
   const encodeMode = ref('vbr')
-  const outputCodec = ref('h264')
   const encodeCrfByCodec = ref(defaultEncodeCrfByCodec())
-  const compatMode = ref(false)
-  const outputCodecOptions = [
-    { value: 'h264', label: 'H.264（預設，相容性最佳）' },
-    { value: 'av1', label: 'AV1（檔案較小）' },
-    { value: 'h265', label: 'H.265 / HEVC' },
+  type OutputMode = 'original' | 'compat' | 'av1'
+  const outputMode = ref<OutputMode>('original')
+  const outputModeOptions: { value: OutputMode; label: string }[] = [
+    { value: 'original', label: '保留原始' },
+    { value: 'compat', label: 'VRChat 相容' },
+    { value: 'av1', label: 'AV1' },
   ]
-  const effectiveOutputCodec = computed(() => (compatMode.value ? 'h264' : outputCodec.value))
+  const compatMode = computed(() => outputMode.value === 'compat')
+  const effectiveOutputCodec = computed(() => (outputMode.value === 'av1' ? 'av1' : 'h264'))
+  const originalModeDisabled = computed(() => playbackSpeedForcesReencode.value)
+  const showAdvancedEncoding = computed(() => outputMode.value !== 'original')
+  const outputModeHint = computed(() => {
+    if (outputMode.value === 'original') {
+      return originalModeDisabled.value
+        ? '非原速時無法保留原始編碼，已改為 VRChat 相容模式'
+        : '僅套用 faststart，不重新編碼（最快）'
+    }
+    if (outputMode.value === 'compat') {
+      return '重新編碼為 H.264 Main Profile，修復 VRChat 固定時間點撕裂問題'
+    }
+    return '重新編碼為 AV1，檔案較小但處理較慢，舊顯示卡不支援加速解碼'
+  })
+
+  function setOutputMode(mode: OutputMode) {
+    if (mode === 'original' && originalModeDisabled.value) return
+    outputMode.value = mode
+  }
   const encodeCrfConfig = computed(
     () => ENCODE_CRF_CONFIG[normalizeOutputCodecKey(effectiveOutputCodec.value)],
   )
@@ -106,9 +125,15 @@ export function useBili2Vrc() {
   )
   const playbackSpeedReencodeWarning = computed(() =>
     playbackSpeedForcesReencode.value
-      ? '非原速：將強制重新編碼影片，處理時間較長'
+      ? '非原速：將強制重新編碼影片，無法保留原始編碼'
       : '變更為非 1.0x 會強制重新編碼影片',
   )
+
+  watch(playbackSpeed, () => {
+    if (originalModeDisabled.value && outputMode.value === 'original') {
+      outputMode.value = 'compat'
+    }
+  })
 
   watch(encodeMode, (mode) => {
     const source = sourceBitrateKbps.value
@@ -203,7 +228,7 @@ export function useBili2Vrc() {
     }
   }
 
-  watch([outputCodec, compatMode], () => {
+  watch(outputMode, () => {
     loadHwaccelStatus()
   })
 
@@ -588,8 +613,12 @@ export function useBili2Vrc() {
     scaleBitrateWithSpeed,
     encodeMode,
     encodeModeOptions,
-    outputCodec,
-    outputCodecOptions,
+    outputMode,
+    outputModeOptions,
+    setOutputMode,
+    originalModeDisabled,
+    showAdvancedEncoding,
+    outputModeHint,
     effectiveOutputCodec,
     encodeCrf,
     encodeCrfConfig,

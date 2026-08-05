@@ -143,6 +143,11 @@
       opacity: 0.45;
       cursor: not-allowed;
     }
+    .output-mode-group .codec-btn {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+    }
     .section-body {
       padding: var(--pad);
     }
