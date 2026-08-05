@@ -16,7 +16,9 @@ export interface VideoMeta {
   duration_formatted?: string
 }
 
-const CODEC_ORDER = ['h264', 'h265', 'av1', 'vp9', 'other']
+const CODEC_ORDER = ['av1', 'h264', 'h265', 'vp9', 'other']
+
+export const DEFAULT_CODEC_FAMILY = 'av1'
 
 const CODEC_FAMILY_LABELS: Record<string, string> = {
   h264: 'H.264',
@@ -74,6 +76,14 @@ export function sortCodecFamilies(families: string[]): string[] {
     const indexB = CODEC_ORDER.indexOf(b)
     return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB)
   })
+}
+
+export function pickDefaultCodecFamily(families: string[]): string {
+  if (families.includes(DEFAULT_CODEC_FAMILY)) return DEFAULT_CODEC_FAMILY
+  for (const family of CODEC_ORDER) {
+    if (families.includes(family)) return family
+  }
+  return families[0] || 'other'
 }
 
 export function isHdrRange(range: string | undefined): boolean {

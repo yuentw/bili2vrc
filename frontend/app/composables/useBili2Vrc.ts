@@ -1,5 +1,10 @@
 import type { VideoFormat, VideoMeta } from './useFormatUtils'
-import { normalizeCodecFamily, sortCodecFamilies } from './useFormatUtils'
+import {
+  DEFAULT_CODEC_FAMILY,
+  normalizeCodecFamily,
+  pickDefaultCodecFamily,
+  sortCodecFamilies,
+} from './useFormatUtils'
 
 type ProcessEvent = {
   type: string
@@ -91,7 +96,7 @@ export function useBili2Vrc() {
   const selectedFormat = ref<VideoFormat | null>(null)
   const selectedIdx = ref(-1)
   const codecFamilies = ref<string[]>([])
-  const codecFamily = ref('h264')
+  const codecFamily = ref(DEFAULT_CODEC_FAMILY)
 
   const videoMeta = ref<VideoMeta | null>(null)
   const showVideoMeta = ref(false)
@@ -179,7 +184,7 @@ export function useBili2Vrc() {
     selectedFormat.value = null
     selectedIdx.value = -1
     codecFamilies.value = []
-    codecFamily.value = 'h264'
+    codecFamily.value = DEFAULT_CODEC_FAMILY
     sourceBitrateKbps.value = null
     bitrateKbps.value = 3000
     fmtTableMessage.value = message
@@ -221,7 +226,7 @@ export function useBili2Vrc() {
       [...new Set(formats.map((format) => normalizeCodecFamily(format.codec)))],
     )
     codecFamilies.value = families
-    codecFamily.value = families.includes('h264') ? 'h264' : families[0] || 'other'
+    codecFamily.value = pickDefaultCodecFamily(families)
   }
 
   function applyCodecFilter() {
