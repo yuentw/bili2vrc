@@ -488,24 +488,36 @@ def transcode_h264(
     playback_speed: float = 1.0,
     bitrate_kbps: int | None = None,
     encode_quality: str | None = None,
+    encode_mode: str | None = None,
+    scale_bitrate_with_speed: bool = True,
     cancel_event: threading.Event | None = None,
     register_proc=None,
 ) -> bool:
     """
     重新編碼為 H.264，可選時間拉伸（setpts + atempo 保留音高）。
-    畫質由 encode_quality（CRF/CQ）控制；bitrate 僅作碼率上限。
+    encode_mode=cbr：固定碼率；vbr：品質＋碼率上限。
+    scale_bitrate_with_speed=False：不把碼率乘上倍速（自訂 CBR 預設值）。
     硬體編碼失敗時自動回退 libx264。
     """
     speed = clamp_playback_speed(float(playback_speed))
     quality = config.normalize_encode_quality(encode_quality)
+    mode = config.normalize_encode_mode(encode_mode)
     base_bitrate = config.clamp_bitrate_kbps(
         bitrate_kbps if bitrate_kbps is not None else config.DEFAULT_BITRATE_KBPS,
     )
-    video_bitrate = config.effective_bitrate_kbps(base_bitrate, speed)
+    if scale_bitrate_with_speed:
+        video_bitrate = config.effective_bitrate_kbps(base_bitrate, speed)
+    else:
+        video_bitrate = base_bitrate
     if video_bitrate != base_bitrate:
         logger.info(
-            "bitrate ceiling for speed: base=%skbps × %sx → %skbps (quality=%s)",
-            base_bitrate, speed, video_bitrate, quality,
+            "bitrate for speed: base=%skbps × %sx → %skbps (mode=%s quality=%s)",
+            base_bitrate, speed, video_bitrate, mode, quality,
+        )
+    elif abs(speed - 1.0) > 1e-6 and not scale_bitrate_with_speed:
+        logger.info(
+            "bitrate speed scale skipped: %skbps (mode=%s quality=%s)",
+            base_bitrate, mode, quality,
         )
     has_audio = _probe_has_audio(src)
     source_fps = hwaccel.probe_video_fps(src)
@@ -526,6 +538,7 @@ def transcode_h264(
         encoders=encoders_to_try,
         bitrate_kbps=video_bitrate,
         encode_quality=quality,
+        encode_mode=mode,
         cancel_event=cancel_event,
         register_proc=register_proc,
     )
@@ -543,6 +556,7 @@ def _transcode_h264_try(
     encoders: list,
     bitrate_kbps: int,
     encode_quality: str,
+    encode_mode: str,
     cancel_event: threading.Event | None,
     register_proc,
 ) -> bool:
@@ -587,7 +601,9 @@ def _transcode_h264_try(
             cmd += ["-vf", video_filter, "-an"]
 
         video_args = list(
-            hwaccel.video_encode_args(encoder.name, bitrate_kbps, encode_quality),
+            hwaccel.video_encode_args(
+                encoder.name, bitrate_kbps, encode_quality, encode_mode,
+            ),
         )
         if speed_changed:
             # B-frames + bad VFR timestamps commonly freeze Unity / VRChat video.
@@ -604,9 +620,9 @@ def _transcode_h264_try(
         cmd += ["-avoid_negative_ts", "make_zero", "-movflags", "+faststart", dst]
 
         logger.info(
-            "transcode start: encoder=%s speed=%sx quality=%s maxrate=%skbps fps_in=%.3f fps_out=%s audio=%s src=%s",
-            encoder.name, speed, encode_quality, bitrate_kbps, source_fps or 0, out_fps,
-            has_audio, os.path.basename(src),
+            "transcode start: encoder=%s speed=%sx mode=%s quality=%s bitrate=%skbps fps_in=%.3f fps_out=%s audio=%s src=%s",
+            encoder.name, speed, encode_mode, encode_quality, bitrate_kbps,
+            source_fps or 0, out_fps, has_audio, os.path.basename(src),
         )
         ok, err_tail = _run_ffmpeg_transcode(
             cmd,
@@ -802,7 +818,8 @@ def fetch_formats():
 
 def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
                compat_mode: bool, playback_speed: float, bitrate_kbps: int,
-               encode_quality: str,
+               encode_quality: str, encode_mode: str,
+               scale_bitrate_with_speed: bool,
                cookie_path: str | None,
                job_id: str, cancel_event: threading.Event, q: queue.Queue):
     """在子執行緒中執行；用 q 回傳進度事件"""
@@ -833,9 +850,9 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
 
     try:
         logger.info(
-            "process start: job=%s url=%s format_id=%s ttl=%s compat=%s speed=%sx quality=%s maxrate=%skbps",
+            "process start: job=%s url=%s format_id=%s ttl=%s compat=%s speed=%sx mode=%s quality=%s bitrate=%skbps scale_speed=%s",
             job_id, url, format_id, ttl, compat_mode, clamp_playback_speed(playback_speed),
-            encode_quality, bitrate_kbps,
+            encode_mode, encode_quality, bitrate_kbps, scale_bitrate_with_speed,
         )
         if abort_if_cancelled():
             return
@@ -990,6 +1007,8 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
                 playback_speed=speed,
                 bitrate_kbps=bitrate_kbps,
                 encode_quality=encode_quality,
+                encode_mode=encode_mode,
+                scale_bitrate_with_speed=scale_bitrate_with_speed,
                 cancel_event=cancel_event,
                 register_proc=register_proc,
             )
@@ -1122,6 +1141,12 @@ def process():
     playback_speed = clamp_playback_speed(float(data.get("playback_speed", 1) or 1))
     bitrate_kbps = config.clamp_bitrate_kbps(data.get("bitrate_kbps", config.DEFAULT_BITRATE_KBPS))
     encode_quality = config.normalize_encode_quality(data.get("encode_quality"))
+    encode_mode = config.normalize_encode_mode(data.get("encode_mode"))
+    # Default True; CBR non-source presets send False so bitrate is not × speed.
+    if "scale_bitrate_with_speed" in data:
+        scale_bitrate_with_speed = bool(data.get("scale_bitrate_with_speed"))
+    else:
+        scale_bitrate_with_speed = True
     cookie_content = (data.get("cookie_content") or "").strip() or None
 
     if not url or not format_id:
@@ -1140,9 +1165,9 @@ def process():
             return jsonify({"error": str(exc)}), 400
 
     logger.info(
-        "api/process: format_id=%s ttl=%s compat=%s speed=%sx quality=%s maxrate=%skbps platform=%s cookie_used=%s",
-        format_id, ttl, compat_mode, playback_speed, encode_quality, bitrate_kbps,
-        url_platform, bool(cookie_content),
+        "api/process: format_id=%s ttl=%s compat=%s speed=%sx mode=%s quality=%s bitrate=%skbps scale_speed=%s platform=%s cookie_used=%s",
+        format_id, ttl, compat_mode, playback_speed, encode_mode, encode_quality, bitrate_kbps,
+        scale_bitrate_with_speed, url_platform, bool(cookie_content),
     )
 
     q = queue.Queue()
@@ -1152,7 +1177,8 @@ def process():
     t = threading.Thread(
         target=do_process,
         args=(url, format_id, key_phrase, ttl, compat_mode, playback_speed, bitrate_kbps,
-              encode_quality, cookie_path, job_id, cancel_event, q),
+              encode_quality, encode_mode, scale_bitrate_with_speed, cookie_path, job_id,
+              cancel_event, q),
         daemon=True,
     )
     t.start()

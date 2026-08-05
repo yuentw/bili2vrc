@@ -305,6 +305,18 @@ function copyRetroUrl() {
                   </select>
                 </div>
                 <div class="field-col">
+                  <label class="xp-label" for="encodeMode">編碼模式（重新編碼時）:</label>
+                  <select class="xp-select" id="encodeMode" v-model="app.encodeMode">
+                    <option
+                      v-for="option in app.encodeModeOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field-col">
                   <label class="xp-label" for="encodeQuality">編碼品質（重新編碼時）:</label>
                   <select class="xp-select" id="encodeQuality" v-model="app.encodeQuality">
                     <option
@@ -316,8 +328,10 @@ function copyRetroUrl() {
                     </option>
                   </select>
                 </div>
+              </div>
+              <div class="field-row">
                 <div class="field-col">
-                  <label class="xp-label" for="bitrateKbps">碼率上限（重新編碼時）:</label>
+                  <label class="xp-label" for="bitrateKbps">{{ app.bitrateFieldLabel }}:</label>
                   <select class="xp-select" id="bitrateKbps" v-model.number="app.bitrateKbps">
                     <option
                       v-if="app.bitrateSelectOptions.source"
@@ -334,9 +348,10 @@ function copyRetroUrl() {
                     </option>
                   </select>
                   <div class="xp-hint">
-                    以品質為主；碼率只當上限。
-                    <template v-if="Number(app.playbackSpeed) !== 1">
-                      倍速上限約 {{ app.bitrateCeilingKbps }} kbps（選取值 × {{ app.playbackSpeed }}x）
+                    {{ app.bitrateFieldHint }}
+                    <template v-if="Number(app.playbackSpeed) !== 1 && app.scaleBitrateWithSpeed">
+                      。倍速實際{{ app.encodeMode === 'cbr' ? '目標' : '上限' }}
+                      {{ app.bitrateCeilingKbps }} kbps（選取值 × {{ app.playbackSpeed }}x）
                     </template>
                   </div>
                 </div>

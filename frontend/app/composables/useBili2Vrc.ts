@@ -19,25 +19,64 @@ export function useBili2Vrc() {
   const bitrateKbps = ref(3000)
   const sourceBitrateKbps = ref<number | null>(null)
   const encodeQuality = ref('balanced')
+  const encodeMode = ref('vbr')
   const compatMode = ref(false)
-  const bitratePresetOptions = [1500, 2000, 3000, 4000, 5000, 8000]
+  const vbrBitratePresets = [1500, 2000, 3000, 4000, 5000, 8000]
+  const cbrBitratePresets = [2000, 4000, 5000, 6000, 8000, 10000]
+  const encodeModeOptions = [
+    { value: 'vbr', label: 'VBR（品質 + 碼率上限）' },
+    { value: 'cbr', label: 'CBR（固定碼率）' },
+  ]
   const encodeQualityOptions = [
     { value: 'high', label: '高畫質（檔案較大）' },
     { value: 'balanced', label: '標準' },
     { value: 'medium', label: '較小檔案' },
     { value: 'small', label: '最小檔案' },
   ]
+  const bitrateFieldLabel = computed(() =>
+    encodeMode.value === 'cbr' ? '目標碼率（重新編碼時）' : '碼率上限（重新編碼時）',
+  )
+  const usingSourceBitrate = computed(() => {
+    const source = sourceBitrateKbps.value
+    return source != null && Number(bitrateKbps.value) === source
+  })
+  // CBR 選固定預設時不 × 倍速；原片 CBR / VBR 仍會 × 倍速
+  const scaleBitrateWithSpeed = computed(
+    () => encodeMode.value !== 'cbr' || usingSourceBitrate.value,
+  )
+  const bitrateFieldHint = computed(() => {
+    if (encodeMode.value === 'cbr') {
+      if (usingSourceBitrate.value) {
+        return '原片 CBR；倍速時會自動 × 倍速調整目標碼率'
+      }
+      return '固定碼率；自訂預設不隨倍速調整碼率'
+    }
+    return '以品質為主，並強制遵守碼率上限'
+  })
   const bitrateSelectOptions = computed(() => {
     const source = sourceBitrateKbps.value
-    const presets = bitratePresetOptions.filter((kbps) => kbps !== source)
+    const presets = (encodeMode.value === 'cbr' ? cbrBitratePresets : vbrBitratePresets)
+      .filter((kbps) => kbps !== source)
     return { source, presets }
   })
 
   const bitrateCeilingKbps = computed(() => {
     const base = Number(bitrateKbps.value) || 3000
     const speed = Number(playbackSpeed.value) || 1
-    if (Math.abs(speed - 1) < 1e-6) return Math.round(base)
+    if (!scaleBitrateWithSpeed.value || Math.abs(speed - 1) < 1e-6) {
+      return Math.round(base)
+    }
     return Math.max(500, Math.min(50000, Math.round(base * speed)))
+  })
+
+  watch(encodeMode, (mode) => {
+    const source = sourceBitrateKbps.value
+    const current = Number(bitrateKbps.value)
+    if (source != null && current === source) return
+    const presets = mode === 'cbr' ? cbrBitratePresets : vbrBitratePresets
+    if (!presets.includes(current)) {
+      bitrateKbps.value = presets.includes(4000) ? 4000 : (presets[0] ?? 3000)
+    }
   })
 
   const allFormats = ref<VideoFormat[]>([])
@@ -342,6 +381,8 @@ export function useBili2Vrc() {
             playback_speed: Number(playbackSpeed.value) || 1,
             bitrate_kbps: Number(bitrateKbps.value) || 3000,
             encode_quality: encodeQuality.value || 'balanced',
+            encode_mode: encodeMode.value || 'vbr',
+            scale_bitrate_with_speed: scaleBitrateWithSpeed.value,
           }),
         ),
       })
@@ -483,9 +524,16 @@ export function useBili2Vrc() {
     playbackSpeed,
     bitrateKbps,
     sourceBitrateKbps,
-    bitratePresetOptions,
+    vbrBitratePresets,
+    cbrBitratePresets,
     bitrateSelectOptions,
     bitrateCeilingKbps,
+    bitrateFieldLabel,
+    bitrateFieldHint,
+    usingSourceBitrate,
+    scaleBitrateWithSpeed,
+    encodeMode,
+    encodeModeOptions,
     encodeQuality,
     encodeQualityOptions,
     compatMode,

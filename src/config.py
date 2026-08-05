@@ -64,8 +64,15 @@ DEFAULT_TTL = effective_ttl(int(os.environ.get("DEFAULT_TTL", "604800")))  # 7 d
 DEFAULT_BITRATE_KBPS = int(os.environ.get("DEFAULT_BITRATE_KBPS", "3000"))
 MIN_BITRATE_KBPS = int(os.environ.get("MIN_BITRATE_KBPS", "500"))
 MAX_BITRATE_KBPS = int(os.environ.get("MAX_BITRATE_KBPS", "50000"))  # 0 = no cap
-# Mild ceiling bump when speeding (bitrate is only a maxrate cap; quality is CRF/CQ).
+# When speeding: bitrate (CBR target / VBR ceiling) = base × speed × factor
+# Skipped for CBR when client sends scale_bitrate_with_speed=false (non-source preset).
 SPEED_BITRATE_FACTOR = float(os.environ.get("SPEED_BITRATE_FACTOR", "1.0"))
+CBR_BITRATE_PRESETS_KBPS = (2000, 4000, 5000, 6000, 8000, 10000)
+
+ENCODE_MODES = ("cbr", "vbr")
+DEFAULT_ENCODE_MODE = os.environ.get("DEFAULT_ENCODE_MODE", "vbr").strip().lower()
+if DEFAULT_ENCODE_MODE not in ENCODE_MODES:
+    DEFAULT_ENCODE_MODE = "vbr"
 
 # Lower CRF/CQ/global_quality = higher visual quality (ffmpeg convention).
 ENCODE_QUALITY_PRESETS: dict[str, dict[str, int]] = {
@@ -78,6 +85,19 @@ DEFAULT_ENCODE_QUALITY = os.environ.get("DEFAULT_ENCODE_QUALITY", "balanced").st
 if DEFAULT_ENCODE_QUALITY not in ENCODE_QUALITY_PRESETS:
     DEFAULT_ENCODE_QUALITY = "balanced"
 
+# QSV/AMF VBR: ICQ/QP ignores maxrate, so quality maps to average target ÷ ceiling.
+ENCODE_VBR_TARGET_RATIO: dict[str, float] = {
+    "high": 0.90,
+    "balanced": 0.75,
+    "medium": 0.60,
+    "small": 0.45,
+}
+
+
+def normalize_encode_mode(mode) -> str:
+    key = str(mode or DEFAULT_ENCODE_MODE).strip().lower()
+    return key if key in ENCODE_MODES else DEFAULT_ENCODE_MODE
+
 
 def normalize_encode_quality(quality) -> str:
     key = str(quality or DEFAULT_ENCODE_QUALITY).strip().lower()
@@ -86,6 +106,17 @@ def normalize_encode_quality(quality) -> str:
 
 def encode_quality_params(quality) -> dict[str, int]:
     return dict(ENCODE_QUALITY_PRESETS[normalize_encode_quality(quality)])
+
+
+def vbr_target_kbps(ceiling_kbps, quality) -> int:
+    """Average VBR target under a hard maxrate ceiling (for encoders that ignore ICQ caps)."""
+    ceiling = clamp_bitrate_kbps(ceiling_kbps)
+    ratio = ENCODE_VBR_TARGET_RATIO.get(normalize_encode_quality(quality), 0.75)
+    if ratio <= 0:
+        ratio = 0.75
+    if ratio > 1:
+        ratio = 1.0
+    return max(MIN_BITRATE_KBPS, min(ceiling, int(round(ceiling * ratio))))
 
 
 def clamp_bitrate_kbps(bitrate_kbps) -> int:
@@ -103,7 +134,7 @@ def clamp_bitrate_kbps(bitrate_kbps) -> int:
 
 def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
     """
-    Bitrate ceiling when speeding: base × speed × SPEED_BITRATE_FACTOR.
+    CBR target / VBR ceiling when speeding: base × speed × SPEED_BITRATE_FACTOR.
     Visual quality is controlled separately via encode_quality (CRF/CQ).
     """
     base = clamp_bitrate_kbps(bitrate_kbps)
