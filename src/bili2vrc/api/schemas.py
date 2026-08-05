@@ -16,6 +16,7 @@ class ProcessRequest(BaseModel):
     bitrate_kbps: int | None = None
     encode_quality: str | None = None
     encode_mode: str | None = None
+    encode_crf: int | None = Field(default=None, ge=0, le=63)
     scale_bitrate_with_speed: bool | None = None
     output_codec: str | None = None
     cookie_content: str | None = None

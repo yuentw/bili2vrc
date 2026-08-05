@@ -317,100 +317,113 @@ function onResultVideoLoad() {
             <div class="field">
               <label>保存時間</label>
               <select v-model="app.ttl">
-                <option :value="3600">1 小時後自動刪除</option>
-                <option :value="86400">1 天後自動刪除</option>
-                <option :value="604800">7 天後自動刪除</option>
-                <option :value="2592000">30 天後自動刪除</option>
+                <option :value="3600">1 小時</option>
+                <option :value="86400">1 天</option>
+                <option :value="604800">7 天</option>
+                <option :value="2592000">30 天</option>
                 <option :value="0">永久保存</option>
               </select>
             </div>
             <div class="field">
-              <label>播放速度（上傳前永久變更）</label>
+              <label>播放速度（上傳前處理）</label>
               <select
                 :value="app.playbackSpeed"
                 @change="app.playbackSpeed = Number(($event.target as HTMLSelectElement).value)"
               >
-                <option :value="0.5">0.5x（慢速）</option>
+                <option :value="0.5">0.5x</option>
                 <option :value="0.75">0.75x</option>
-                <option :value="1">1.0x（原速）</option>
+                <option :value="1">1.0x</option>
                 <option :value="1.25">1.25x</option>
                 <option :value="1.5">1.5x</option>
                 <option :value="1.75">1.75x</option>
-                <option :value="2">2.0x（快速）</option>
+                <option :value="2">2.0x</option>
               </select>
-            </div>
-            <div class="field">
-              <label>輸出編碼（重新編碼時）</label>
-              <select v-model="app.outputCodec" :disabled="app.compatMode">
-                <option
-                  v-for="option in app.outputCodecOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-              <div v-if="app.compatMode" class="field-hint">
-                VRChat 相容模式固定使用 H.264
-              </div>
-            </div>
-            <div class="field">
-              <label>編碼模式（重新編碼時）</label>
-              <select v-model="app.encodeMode">
-                <option
-                  v-for="option in app.encodeModeOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-            <div class="field">
-              <label>編碼品質（重新編碼時）</label>
-              <select v-model="app.encodeQuality">
-                <option
-                  v-for="option in app.encodeQualityOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-            <div class="field">
-              <label>{{ app.bitrateFieldLabel }}</label>
-              <select v-model.number="app.bitrateKbps">
-                <option
-                  v-if="app.bitrateSelectOptions.source"
-                  :value="app.bitrateSelectOptions.source"
-                >
-                  原始（{{ app.bitrateSelectOptions.source }} kbps）
-                </option>
-                <option
-                  v-for="kbps in app.bitrateSelectOptions.presets"
-                  :key="kbps"
-                  :value="kbps"
-                >
-                  {{ kbps }} kbps
-                </option>
-              </select>
-              <div class="field-hint">
-                {{ app.bitrateFieldHint }}
-                <template v-if="Number(app.playbackSpeed) !== 1 && app.scaleBitrateWithSpeed">
-                  。倍速實際{{ app.encodeMode === 'cbr' ? '目標' : '上限' }}
-                  {{ app.bitrateCeilingKbps }} kbps（選取值 × {{ app.playbackSpeed }}x）
-                </template>
+              <div
+                class="field-hint"
+                :class="{ 'field-hint-warn': app.playbackSpeedForcesReencode }"
+              >
+                {{ app.playbackSpeedReencodeWarning }}
               </div>
             </div>
             <div class="field field-full">
               <label class="compat-check">
                 <input type="checkbox" v-model="app.compatMode">
-                <span>VRChat 相容模式 — 重新編碼為 H.264（修復固定時間點撕裂，較慢）</span>
+                <span>VRChat 相容模式 — 強制編碼為 H.264（修復固定時間點撕裂，較慢）</span>
               </label>
-              <div id="hwEncoderLabel">{{ app.hwEncoderLabel }}</div>
             </div>
           </div>
+
+          <details class="advanced-options">
+            <summary>進階編碼選項（預設 H.264，多數情況無需調整）</summary>
+            <div class="options-grid advanced-options-body">
+              <div class="field">
+                <label>輸出編碼（重新編碼時）</label>
+                <select v-model="app.outputCodec" :disabled="app.compatMode">
+                  <option
+                    v-for="option in app.outputCodecOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+                <div v-if="app.compatMode" class="field-hint">
+                  VRChat 相容模式固定使用 H.264
+                </div>
+              </div>
+              <div class="field">
+                <label>編碼模式（重新編碼時）</label>
+                <select v-model="app.encodeMode">
+                  <option
+                    v-for="option in app.encodeModeOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
+              <div class="field">
+                <label>{{ app.encodeCrfLabel }}</label>
+                <input
+                  type="number"
+                  v-model.number="app.encodeCrf"
+                  :min="app.encodeCrfConfig.min"
+                  :max="app.encodeCrfConfig.max"
+                  step="1"
+                >
+                <div class="field-hint">{{ app.encodeCrfConfig.hint }}</div>
+              </div>
+              <div class="field">
+                <label>{{ app.bitrateFieldLabel }}</label>
+                <select v-model.number="app.bitrateKbps">
+                  <option
+                    v-if="app.bitrateSelectOptions.source"
+                    :value="app.bitrateSelectOptions.source"
+                  >
+                    原始（{{ app.bitrateSelectOptions.source }} kbps）
+                  </option>
+                  <option
+                    v-for="kbps in app.bitrateSelectOptions.presets"
+                    :key="kbps"
+                    :value="kbps"
+                  >
+                    {{ kbps }} kbps
+                  </option>
+                </select>
+                <div class="field-hint">
+                  {{ app.bitrateFieldHint }}
+                  <template v-if="Number(app.playbackSpeed) !== 1 && app.scaleBitrateWithSpeed">
+                    。倍速實際{{ app.encodeMode === 'cbr' ? '目標' : '上限' }}
+                    {{ app.bitrateCeilingKbps }} kbps（選取值 × {{ app.playbackSpeed }}x）
+                  </template>
+                </div>
+              </div>
+              <div class="field field-full">
+                <div id="hwEncoderLabel">{{ app.hwEncoderLabel }}</div>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
 

@@ -88,6 +88,7 @@ def transcode_video(
     bitrate_kbps: int | None = None,
     encode_quality: str | None = None,
     encode_mode: str | None = None,
+    encode_crf: int | None = None,
     scale_bitrate_with_speed: bool = True,
     cancel_event: threading.Event | None = None,
     register_proc=None,
@@ -123,6 +124,7 @@ def transcode_video(
         src,
         dst,
         emit_fn,
+        output_codec=codec,
         codec_label=codec_label,
         speed=speed,
         has_audio=has_audio,
@@ -132,6 +134,7 @@ def transcode_video(
         bitrate_kbps=video_bitrate,
         encode_quality=quality,
         encode_mode=mode,
+        encode_crf=encode_crf,
         cancel_event=cancel_event,
         register_proc=register_proc,
     )
@@ -152,6 +155,7 @@ def _transcode_video_try(
     dst: str,
     emit_fn,
     *,
+    output_codec: str,
     codec_label: str,
     speed: float,
     has_audio: bool,
@@ -161,6 +165,7 @@ def _transcode_video_try(
     bitrate_kbps: int,
     encode_quality: str,
     encode_mode: str,
+    encode_crf: int | None,
     cancel_event: threading.Event | None,
     register_proc,
 ) -> bool:
@@ -206,7 +211,12 @@ def _transcode_video_try(
 
         video_args = list(
             hwaccel.video_encode_args(
-                encoder.name, bitrate_kbps, encode_quality, encode_mode,
+                encoder.name,
+                bitrate_kbps,
+                encode_quality,
+                encode_mode,
+                encode_crf,
+                output_codec,
             ),
         )
         if speed_changed:

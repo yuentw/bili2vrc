@@ -5,6 +5,12 @@ import {
   pickDefaultCodecFamily,
   sortCodecFamilies,
 } from './useFormatUtils'
+import {
+  ENCODE_CRF_CONFIG,
+  clampEncodeCrf,
+  defaultEncodeCrfByCodec,
+  normalizeOutputCodecKey,
+} from './useEncodeCrf'
 
 type ProcessEvent = {
   type: string
@@ -25,25 +31,38 @@ export function useBili2Vrc() {
   const sourceBitrateKbps = ref<number | null>(null)
   const encodeQuality = ref('balanced')
   const encodeMode = ref('vbr')
-  const outputCodec = ref('av1')
+  const outputCodec = ref('h264')
+  const encodeCrfByCodec = ref(defaultEncodeCrfByCodec())
   const compatMode = ref(false)
   const outputCodecOptions = [
-    { value: 'av1', label: 'AV1（預設，檔案較小）' },
-    { value: 'h264', label: 'H.264（相容性最佳）' },
+    { value: 'h264', label: 'H.264（預設，相容性最佳）' },
+    { value: 'av1', label: 'AV1（檔案較小）' },
     { value: 'h265', label: 'H.265 / HEVC' },
   ]
   const effectiveOutputCodec = computed(() => (compatMode.value ? 'h264' : outputCodec.value))
+  const encodeCrfConfig = computed(
+    () => ENCODE_CRF_CONFIG[normalizeOutputCodecKey(effectiveOutputCodec.value)],
+  )
+  const encodeCrf = computed({
+    get() {
+      const key = normalizeOutputCodecKey(effectiveOutputCodec.value)
+      return encodeCrfByCodec.value[key]
+    },
+    set(value: number) {
+      const key = normalizeOutputCodecKey(effectiveOutputCodec.value)
+      encodeCrfByCodec.value[key] = clampEncodeCrf(key, value)
+    },
+  })
+  const encodeCrfLabel = computed(() => {
+    const key = normalizeOutputCodecKey(effectiveOutputCodec.value)
+    if (key === 'av1') return 'CRF（AV1）'
+    return 'CRF（品質）'
+  })
   const vbrBitratePresets = [1500, 2000, 3000, 4000, 5000, 8000]
   const cbrBitratePresets = [2000, 4000, 5000, 6000, 8000, 10000]
   const encodeModeOptions = [
     { value: 'vbr', label: 'VBR（品質 + 碼率上限）' },
     { value: 'cbr', label: 'CBR（固定碼率）' },
-  ]
-  const encodeQualityOptions = [
-    { value: 'high', label: '高畫質（檔案較大）' },
-    { value: 'balanced', label: '標準' },
-    { value: 'medium', label: '較小檔案' },
-    { value: 'small', label: '最小檔案' },
   ]
   const bitrateFieldLabel = computed(() =>
     encodeMode.value === 'cbr' ? '目標碼率（重新編碼時）' : '碼率上限（重新編碼時）',
@@ -80,6 +99,15 @@ export function useBili2Vrc() {
     }
     return Math.max(500, Math.min(50000, Math.round(base * speed)))
   })
+
+  const playbackSpeedForcesReencode = computed(
+    () => Math.abs(Number(playbackSpeed.value) - 1) > 1e-6,
+  )
+  const playbackSpeedReencodeWarning = computed(() =>
+    playbackSpeedForcesReencode.value
+      ? '非原速：將強制重新編碼影片，處理時間較長'
+      : '變更為非 1.0x 會強制重新編碼影片',
+  )
 
   watch(encodeMode, (mode) => {
     const source = sourceBitrateKbps.value
@@ -403,6 +431,7 @@ export function useBili2Vrc() {
             bitrate_kbps: Number(bitrateKbps.value) || 3000,
             encode_quality: encodeQuality.value || 'balanced',
             encode_mode: encodeMode.value || 'vbr',
+            encode_crf: encodeCrf.value,
             output_codec: effectiveOutputCodec.value,
             scale_bitrate_with_speed: scaleBitrateWithSpeed.value,
           }),
@@ -544,6 +573,8 @@ export function useBili2Vrc() {
     keyPhrase,
     ttl,
     playbackSpeed,
+    playbackSpeedForcesReencode,
+    playbackSpeedReencodeWarning,
     bitrateKbps,
     sourceBitrateKbps,
     vbrBitratePresets,
@@ -559,8 +590,10 @@ export function useBili2Vrc() {
     outputCodec,
     outputCodecOptions,
     effectiveOutputCodec,
+    encodeCrf,
+    encodeCrfConfig,
+    encodeCrfLabel,
     encodeQuality,
-    encodeQualityOptions,
     compatMode,
     allFormats,
     filteredFormats,

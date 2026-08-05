@@ -101,6 +101,32 @@ def encode_quality_params(quality) -> dict[str, int]:
     return dict(ENCODE_QUALITY_PRESETS[normalize_encode_quality(quality)])
 
 
+def clamp_encode_crf(crf, output_codec: str) -> int:
+    """Clamp user CRF to codec-appropriate range."""
+    codec = normalize_output_codec(output_codec)
+    try:
+        value = int(crf)
+    except (TypeError, ValueError):
+        value = 30 if codec == "av1" else 19
+    if codec == "av1":
+        return max(0, min(63, value))
+    return max(0, min(51, value))
+
+
+def encode_quality_params_for_request(
+    encode_quality: str,
+    encode_crf: int | None = None,
+    output_codec: str = "h264",
+) -> dict[str, int]:
+    """Preset tuning plus optional explicit CRF (and mapped HW quality knobs)."""
+    base = encode_quality_params(encode_quality)
+    if encode_crf is None:
+        return base
+    crf = clamp_encode_crf(encode_crf, output_codec)
+    vt_q = max(1, min(100, int(round(130 - crf * 3.4))))
+    return {**base, "crf": crf, "cq": crf, "qsv": max(0, min(51, crf + 1)), "vt_q": vt_q}
+
+
 def vbr_target_kbps(ceiling_kbps, quality) -> int:
     ceiling = clamp_bitrate_kbps(ceiling_kbps)
     ratio = ENCODE_VBR_TARGET_RATIO.get(normalize_encode_quality(quality), 0.75)
@@ -136,9 +162,9 @@ def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
 
 
 OUTPUT_CODECS = ("av1", "h264", "h265")
-DEFAULT_OUTPUT_CODEC = os.environ.get("DEFAULT_OUTPUT_CODEC", "av1").strip().lower()
+DEFAULT_OUTPUT_CODEC = os.environ.get("DEFAULT_OUTPUT_CODEC", "h264").strip().lower()
 if DEFAULT_OUTPUT_CODEC not in OUTPUT_CODECS:
-    DEFAULT_OUTPUT_CODEC = "av1"
+    DEFAULT_OUTPUT_CODEC = "h264"
 
 OUTPUT_CODEC_LABELS = {
     "av1": "AV1",

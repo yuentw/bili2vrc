@@ -303,76 +303,11 @@ function copyRetroUrl() {
                     <option :value="1.75">1.75x</option>
                     <option :value="2">2.0x（快速）</option>
                   </select>
-                </div>
-                <div class="field-col">
-                  <label class="xp-label" for="outputCodec">輸出編碼（重新編碼時）:</label>
-                  <select
-                    class="xp-select"
-                    id="outputCodec"
-                    v-model="app.outputCodec"
-                    :disabled="app.compatMode"
+                  <div
+                    class="xp-hint"
+                    :class="{ 'xp-hint-warn': app.playbackSpeedForcesReencode }"
                   >
-                    <option
-                      v-for="option in app.outputCodecOptions"
-                      :key="option.value"
-                      :value="option.value"
-                    >
-                      {{ option.label }}
-                    </option>
-                  </select>
-                  <div v-if="app.compatMode" class="field-hint">
-                    VRChat 相容模式固定使用 H.264
-                  </div>
-                </div>
-                <div class="field-col">
-                  <label class="xp-label" for="encodeMode">編碼模式（重新編碼時）:</label>
-                  <select class="xp-select" id="encodeMode" v-model="app.encodeMode">
-                    <option
-                      v-for="option in app.encodeModeOptions"
-                      :key="option.value"
-                      :value="option.value"
-                    >
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </div>
-                <div class="field-col">
-                  <label class="xp-label" for="encodeQuality">編碼品質（重新編碼時）:</label>
-                  <select class="xp-select" id="encodeQuality" v-model="app.encodeQuality">
-                    <option
-                      v-for="option in app.encodeQualityOptions"
-                      :key="option.value"
-                      :value="option.value"
-                    >
-                      {{ option.label }}
-                    </option>
-                  </select>
-                </div>
-              </div>
-              <div class="field-row">
-                <div class="field-col">
-                  <label class="xp-label" for="bitrateKbps">{{ app.bitrateFieldLabel }}:</label>
-                  <select class="xp-select" id="bitrateKbps" v-model.number="app.bitrateKbps">
-                    <option
-                      v-if="app.bitrateSelectOptions.source"
-                      :value="app.bitrateSelectOptions.source"
-                    >
-                      原始（{{ app.bitrateSelectOptions.source }} kbps）
-                    </option>
-                    <option
-                      v-for="kbps in app.bitrateSelectOptions.presets"
-                      :key="kbps"
-                      :value="kbps"
-                    >
-                      {{ kbps }} kbps
-                    </option>
-                  </select>
-                  <div class="xp-hint">
-                    {{ app.bitrateFieldHint }}
-                    <template v-if="Number(app.playbackSpeed) !== 1 && app.scaleBitrateWithSpeed">
-                      。倍速實際{{ app.encodeMode === 'cbr' ? '目標' : '上限' }}
-                      {{ app.bitrateCeilingKbps }} kbps（選取值 × {{ app.playbackSpeed }}x）
-                    </template>
+                    {{ app.playbackSpeedReencodeWarning }}
                   </div>
                 </div>
               </div>
@@ -380,7 +315,85 @@ function copyRetroUrl() {
                 <input type="checkbox" id="compatMode" v-model="app.compatMode">
                 <span><b>VRChat 相容模式</b> — 重新編碼為 H.264 Main Profile（修復固定時間點撕裂問題，速度較慢）</span>
               </label>
-              <div id="hwEncoderLabel">{{ app.hwEncoderLabel }}</div>
+
+              <details class="xp-advanced-options">
+                <summary class="xp-advanced-summary">進階編碼選項（預設 H.264）</summary>
+                <div class="field-row">
+                  <div class="field-col">
+                    <label class="xp-label" for="outputCodec">輸出編碼（重新編碼時）:</label>
+                    <select
+                      class="xp-select"
+                      id="outputCodec"
+                      v-model="app.outputCodec"
+                      :disabled="app.compatMode"
+                    >
+                      <option
+                        v-for="option in app.outputCodecOptions"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                    <div v-if="app.compatMode" class="field-hint">
+                      VRChat 相容模式固定使用 H.264
+                    </div>
+                  </div>
+                  <div class="field-col">
+                    <label class="xp-label" for="encodeMode">編碼模式（重新編碼時）:</label>
+                    <select class="xp-select" id="encodeMode" v-model="app.encodeMode">
+                      <option
+                        v-for="option in app.encodeModeOptions"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="field-col">
+                    <label class="xp-label" for="encodeCrf">{{ app.encodeCrfLabel }}:</label>
+                    <input
+                      class="xp-input"
+                      type="number"
+                      id="encodeCrf"
+                      v-model.number="app.encodeCrf"
+                      :min="app.encodeCrfConfig.min"
+                      :max="app.encodeCrfConfig.max"
+                      step="1"
+                    >
+                    <div class="xp-hint">{{ app.encodeCrfConfig.hint }}</div>
+                  </div>
+                </div>
+                <div class="field-row">
+                  <div class="field-col">
+                    <label class="xp-label" for="bitrateKbps">{{ app.bitrateFieldLabel }}:</label>
+                    <select class="xp-select" id="bitrateKbps" v-model.number="app.bitrateKbps">
+                      <option
+                        v-if="app.bitrateSelectOptions.source"
+                        :value="app.bitrateSelectOptions.source"
+                      >
+                        原始（{{ app.bitrateSelectOptions.source }} kbps）
+                      </option>
+                      <option
+                        v-for="kbps in app.bitrateSelectOptions.presets"
+                        :key="kbps"
+                        :value="kbps"
+                      >
+                        {{ kbps }} kbps
+                      </option>
+                    </select>
+                    <div class="xp-hint">
+                      {{ app.bitrateFieldHint }}
+                      <template v-if="Number(app.playbackSpeed) !== 1 && app.scaleBitrateWithSpeed">
+                        。倍速實際{{ app.encodeMode === 'cbr' ? '目標' : '上限' }}
+                        {{ app.bitrateCeilingKbps }} kbps（選取值 × {{ app.playbackSpeed }}x）
+                      </template>
+                    </div>
+                  </div>
+                </div>
+                <div id="hwEncoderLabel">{{ app.hwEncoderLabel }}</div>
+              </details>
             </div>
           </div>
 

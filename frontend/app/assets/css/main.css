@@ -340,6 +340,10 @@
       color: var(--muted);
       line-height: 1.4;
     }
+    .field-hint-warn {
+      color: var(--warn);
+      font-weight: 600;
+    }
     .field input:not([type="checkbox"]),
     .field select {
       width: 100%;
@@ -533,6 +537,35 @@
     }
 
     .field-full { grid-column: 1 / -1; }
+
+    .advanced-options {
+      margin-top: 20px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+    .advanced-options summary {
+      cursor: pointer;
+      padding: 14px 16px;
+      font-size: var(--fs-sm);
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      list-style: none;
+    }
+    .advanced-options summary::-webkit-details-marker { display: none; }
+    .advanced-options summary::before {
+      content: '▸';
+      display: inline-block;
+      margin-right: 8px;
+      transition: transform .15s;
+    }
+    .advanced-options[open] summary::before { transform: rotate(90deg); }
+    .advanced-options-body {
+      padding: 0 20px 20px;
+      border-top: 2px solid var(--border);
+    }
 
     .field label.compat-check {
       display: flex;

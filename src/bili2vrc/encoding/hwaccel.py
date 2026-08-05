@@ -177,6 +177,8 @@ def video_encode_args(
     bitrate_kbps: int,
     encode_quality: str | None = None,
     encode_mode: str | None = None,
+    encode_crf: int | None = None,
+    output_codec: str | None = None,
 ) -> list[str]:
     """
     Encode args for AV1 / H.264 / H.265 encoders.
@@ -186,7 +188,8 @@ def video_encode_args(
     """
     mode = config.normalize_encode_mode(encode_mode)
     quality_key = config.normalize_encode_quality(encode_quality)
-    quality = config.encode_quality_params(quality_key)
+    codec = output_codec or _codec_for_encoder(encoder_name)
+    quality = config.encode_quality_params_for_request(quality_key, encode_crf, codec)
     kbps = max(1, int(bitrate_kbps))
     bitrate = f"{kbps}k"
     maxrate = bitrate
@@ -248,7 +251,9 @@ def video_encode_args(
                 "-b:v", bitrate, "-maxrate", maxrate,
             ]
         sw = SOFTWARE_ENCODERS.get(_codec_for_encoder(encoder_name), "libx264")
-        return video_encode_args(sw, bitrate_kbps, encode_quality, encode_mode)
+        return video_encode_args(
+            sw, bitrate_kbps, encode_quality, encode_mode, encode_crf, codec,
+        )
 
     target_kbps = config.vbr_target_kbps(kbps, quality_key)
     target = f"{target_kbps}k"
@@ -294,7 +299,9 @@ def video_encode_args(
         ]
 
     sw = SOFTWARE_ENCODERS.get(_codec_for_encoder(encoder_name), "libx264")
-    return video_encode_args(sw, bitrate_kbps, encode_quality, encode_mode)
+    return video_encode_args(
+        sw, bitrate_kbps, encode_quality, encode_mode, encode_crf, codec,
+    )
 
 
 def _platform_candidates(gpus: list[str], output_codec: str) -> list[str]:

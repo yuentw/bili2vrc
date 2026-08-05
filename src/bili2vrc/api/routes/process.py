@@ -59,6 +59,11 @@ def process_route(body: ProcessRequest):
     else:
         scale_bitrate_with_speed = True
     output_codec = config.normalize_output_codec(body.output_codec, compat_mode=compat_mode)
+    encode_crf = (
+        config.clamp_encode_crf(body.encode_crf, output_codec)
+        if body.encode_crf is not None
+        else None
+    )
 
     cookie_content = (body.cookie_content or "").strip() or None
 
@@ -78,8 +83,8 @@ def process_route(body: ProcessRequest):
             return JSONResponse({"error": str(exc)}, status_code=400)
 
     logger.info(
-        "api/process: format_id=%s ttl=%s compat=%s speed=%sx codec=%s mode=%s quality=%s bitrate=%skbps scale_speed=%s platform=%s cookie_used=%s",
-        format_id, ttl, compat_mode, playback_speed, output_codec, encode_mode, encode_quality, bitrate_kbps,
+        "api/process: format_id=%s ttl=%s compat=%s speed=%sx codec=%s mode=%s quality=%s crf=%s bitrate=%skbps scale_speed=%s platform=%s cookie_used=%s",
+        format_id, ttl, compat_mode, playback_speed, output_codec, encode_mode, encode_quality, encode_crf, bitrate_kbps,
         scale_bitrate_with_speed, url_platform, bool(cookie_content),
     )
 
@@ -91,7 +96,7 @@ def process_route(body: ProcessRequest):
         target=run_process,
         args=(
             url, format_id, key_phrase, ttl, compat_mode, playback_speed, bitrate_kbps,
-            encode_quality, encode_mode, scale_bitrate_with_speed, output_codec, cookie_path, job_id,
+            encode_quality, encode_mode, scale_bitrate_with_speed, output_codec, encode_crf, cookie_path, job_id,
             cancel_event, event_queue,
         ),
         daemon=True,
