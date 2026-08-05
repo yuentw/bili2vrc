@@ -7,7 +7,7 @@
 Web UI to download **Bilibili / YouTube** videos and upload them to **your own Cloudflare R2 bucket** via the **R2 S3 API**. Produces a **direct URL for watching in VRChat**, with optional **playback speed**, **CBR / VBR encoding**, and hardware acceleration. No Cloudflare Worker required.
 
 ```
-Browser → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
+Browser → FastAPI (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
 ```
 
 ## Features
@@ -45,11 +45,11 @@ Managed with [uv](https://docs.astral.sh/uv/). Main packages:
 
 | Package | Role |
 |---------|------|
-| flask | Web UI / API |
+| fastapi / uvicorn | Web UI / API |
 | requests | HTTP helpers |
 | boto3 | Cloudflare R2 (S3-compatible) upload |
 | yt-dlp | Bilibili / YouTube download |
-| python-dotenv | Load `.env` at startup (`src/config.py`) |
+| python-dotenv | Load `.env` at startup (`src/bili2vrc/config.py`) |
 
 `requirements.txt` is kept for reference; use `uv sync` / `uv lock` for installs.
 
@@ -57,7 +57,7 @@ Managed with [uv](https://docs.astral.sh/uv/). Main packages:
 
 | Stack | Role |
 |-------|------|
-| Nuxt 4 / Vue 3 | SPA UI (`bun run generate` → `frontend/.output/public`, served by Flask) |
+| Nuxt 4 / Vue 3 | SPA UI (`bun run generate` → `frontend/.output/public`, served by FastAPI) |
 
 ---
 
@@ -105,17 +105,17 @@ Without `R2_PUBLIC_BASE_URL`, uploads still work; the app returns `r2://bucket/k
 
 Public R2 URLs support **HTTP Range** requests. Combined with the app’s **faststart** step, VRChat can play progressively without downloading the full file first. This is progressive MP4 playback, not HLS/live streaming.
 
-After upload, the in-page preview uses the **R2 public URL**. If local Flask is stopped, an already-open result page can still play (while the R2 link is valid), but you cannot fetch formats or start new jobs.
+After upload, the in-page preview uses the **R2 public URL**. If the local server is stopped, an already-open result page can still play (while the R2 link is valid), but you cannot fetch formats or start new jobs.
 
 ---
 
 ## Configure bili2vrchat
 
-Two ways (env vars override `src/config.py`). You can also copy [.env.example](.env.example) to `.env` — `load_dotenv()` runs on import.
+Two ways (env vars override `src/bili2vrc/config.py`). You can also copy [.env.example](.env.example) to `.env` — `load_dotenv()` runs on import.
 
-### Option A — Edit `src/config.py` (simplest for local use)
+### Option A — Edit `src/bili2vrc/config.py` (simplest for local use)
 
-Open `src/config.py` and replace the `Fill in … here` placeholders:
+Open `src/bili2vrc/config.py` and replace the `Fill in … here` placeholders:
 
 ```python
 CF_ACCOUNT_ID        = os.environ.get("CF_ACCOUNT_ID", "your-account-id")
@@ -127,7 +127,7 @@ R2_PUBLIC_BASE_URL   = os.environ.get("R2_PUBLIC_BASE_URL", "https://pub-xxxx.r2
 
 Values starting with `Fill in ` are treated as **not configured**.
 
-> Do not commit real secrets to git. Use env vars or a local-only `src/config.py` for production.
+> Do not commit real secrets to git. Use env vars or a local-only `src/bili2vrc/config.py` for production.
 
 ### Option B — Environment variables
 
@@ -229,7 +229,7 @@ Open [http://localhost:5000](http://localhost:5000). On LAN: `http://<host-ip>:5
 
 ### Frontend dev (optional)
 
-Run Flask and Nuxt dev server separately (API proxied to Flask):
+Run the API server and Nuxt dev server separately (API proxied to FastAPI):
 
 ```bash
 uv run app.py          # :5000 — API + built UI if present
@@ -328,7 +328,7 @@ A **background thread** in this app scans the bucket every `R2_CLEANUP_INTERVAL`
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CF_ACCOUNT_ID` | `Fill in …` in `src/config.py` | Cloudflare account ID |
+| `CF_ACCOUNT_ID` | `Fill in …` in `src/bili2vrc/config.py` | Cloudflare account ID |
 | `R2_ACCESS_KEY_ID` | `Fill in …` | R2 API access key ID |
 | `R2_SECRET_ACCESS_KEY` | `Fill in …` | R2 API secret |
 | `R2_BUCKET_NAME` | `Fill in …` | Bucket name (**required**) |
@@ -363,13 +363,17 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 
 | Path | Role |
 |------|------|
-| `app.py` | Entry launcher → runs `src/app.py` via `uv run` |
-| `src/app.py` | Flask app: download / verify / transcode / upload pipeline |
-| `src/config.py` | Settings (R2, TTL, encode, paths); loads `.env` |
-| `src/r2.py` | R2 upload, public URL builder, expiry cleanup |
-| `src/hwaccel.py` | Hardware encoder detection and ffmpeg args (CBR / VBR) |
+| `app.py` | Entry launcher → `uv run` → uvicorn + FastAPI |
+| `src/bili2vrc/main.py` | FastAPI app factory, lifespan, static SPA |
+| `src/bili2vrc/config.py` | Settings (R2, TTL, encode, paths); loads `.env` |
+| `src/bili2vrc/api/` | REST + SSE routes (`/api/*`) |
+| `src/bili2vrc/services/` | Format fetch, download/upload pipeline, job control |
+| `src/bili2vrc/media/` | ffmpeg transcode, MP4 verify / faststart |
+| `src/bili2vrc/download/` | yt-dlp helpers, cookies, aria2c |
+| `src/bili2vrc/storage/r2.py` | R2 upload, public URL, expiry cleanup |
+| `src/bili2vrc/encoding/hwaccel.py` | Hardware encoder detection and ffmpeg args |
 | `frontend/` | Nuxt 4 SPA (`bun run generate` or `bun run dev`) |
-| `frontend/.output/public` | Built static files served by Flask |
+| `frontend/.output/public` | Built static files served by FastAPI |
 | `pyproject.toml` / `uv.lock` | Python project + locked deps (uv) |
 | `requirements.txt` | Legacy pip list (mirror of main deps) |
 | `start.sh` / `start.bat` | Auto-install uv / Bun, build frontend, `uv run app.py` |
@@ -384,7 +388,7 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 
 | Issue | Check |
 |-------|--------|
-| `請設定 R2 環境變數` / R2 not configured | Fill `src/config.py` or set env vars / `.env`; avoid `Fill in …` placeholders |
+| `請設定 R2 環境變數` / R2 not configured | Fill `src/bili2vrc/config.py` or set env vars / `.env`; avoid `Fill in …` placeholders |
 | Upload fails (403 / signature) | Rotate API token; verify bucket name and permissions |
 | No HTTP URL after upload | Set `R2_PUBLIC_BASE_URL`; enable bucket **Settings → Custom Domains** (or Public Development URL) |
 | YouTube fetch fails | Install Node.js; run `node -version` |

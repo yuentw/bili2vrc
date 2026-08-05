@@ -7,7 +7,7 @@ from collections.abc import Callable
 import boto3
 from botocore.exceptions import ClientError
 
-import config
+from bili2vrc import config
 
 logger = logging.getLogger("bili2vrchat")
 

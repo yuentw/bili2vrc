@@ -7,7 +7,7 @@
 用於下載 **Bilibili / YouTube** 影片，並透過 **R2 S3 API** 上傳至**你自己的 Cloudflare R2 儲存桶**。產生**直連網址**，可在 **VRChat** 觀看，並支援**影片倍速**、**CBR／VBR 編碼**與硬體加速。**不需要**部署 Cloudflare Worker。
 
 ```
-瀏覽器 → Flask (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat 直連
+瀏覽器 → FastAPI (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat 直連
 ```
 
 ## 功能
@@ -45,11 +45,11 @@
 
 | 套件 | 用途 |
 |------|------|
-| flask | Web UI／API |
+| fastapi / uvicorn | Web UI／API |
 | requests | HTTP |
 | boto3 | Cloudflare R2（S3 相容）上傳 |
 | yt-dlp | Bilibili／YouTube 下載 |
-| python-dotenv | 啟動時載入 `.env`（`src/config.py`） |
+| python-dotenv | 啟動時載入 `.env`（`src/bili2vrc/config.py`） |
 
 `requirements.txt` 僅供參考；安裝請用 `uv sync`／`uv lock`。
 
@@ -57,7 +57,7 @@
 
 | 技術 | 用途 |
 |------|------|
-| Nuxt 4／Vue 3 | SPA UI（`bun run generate` → `frontend/.output/public`，由 Flask 提供） |
+| Nuxt 4／Vue 3 | SPA UI（`bun run generate` → `frontend/.output/public`，由 FastAPI 提供） |
 
 ---
 
@@ -105,17 +105,17 @@ R2 預設為私有。若要產生 HTTP 連結給 VRChat：
 
 公開 R2 網址支援 **HTTP Range** 請求。搭配本工具的 **faststart** 處理，VRChat 可邊下邊播、支援拖曳進度，無需等整支影片下載完。這是漸進式 MP4 播放，不是 HLS／直播串流。
 
-上傳完成後，網頁預覽直接使用 **R2 公開網址**；本機 Flask 關機後，已開著的結果頁仍可播放（R2 連結有效即可），但無法再獲取格式或新上傳。
+上傳完成後，網頁預覽直接使用 **R2 公開網址**；本機伺服器關機後，已開著的結果頁仍可播放（R2 連結有效即可），但無法再獲取格式或新上傳。
 
 ---
 
 ## 設定 bili2vrchat
 
-兩種方式（環境變數會覆寫 `src/config.py`）。亦可複製 [.env.example](.env.example) 為 `.env` — 匯入時會執行 `load_dotenv()`。
+兩種方式（環境變數會覆寫 `src/bili2vrc/config.py`）。亦可複製 [.env.example](.env.example) 為 `.env` — 匯入時會執行 `load_dotenv()`。
 
-### 方式 A — 直接改 `src/config.py`（本機最簡單）
+### 方式 A — 直接改 `src/bili2vrc/config.py`（本機最簡單）
 
-開啟 `src/config.py`，把 `Fill in … here` 改成你的實際值：
+開啟 `src/bili2vrc/config.py`，把 `Fill in … here` 改成你的實際值：
 
 ```python
 CF_ACCOUNT_ID        = os.environ.get("CF_ACCOUNT_ID", "你的帳號ID")
@@ -229,7 +229,7 @@ uv run app.py
 
 ### 前端開發（可選）
 
-Flask 與 Nuxt 開發伺服器分開跑（API 代理至 Flask）：
+API 伺服器與 Nuxt 開發伺服器分開跑（API 代理至 FastAPI）：
 
 ```bash
 uv run app.py              # :5000 — API + 已建置的 UI（若有）
@@ -328,7 +328,7 @@ docker run --rm -p 5000:5000 \
 
 | 變數 | 預設值 | 說明 |
 |------|--------|------|
-| `CF_ACCOUNT_ID` | `src/config.py` 內 `Fill in …` | Cloudflare 帳號 ID |
+| `CF_ACCOUNT_ID` | `src/bili2vrc/config.py` 內 `Fill in …` | Cloudflare 帳號 ID |
 | `R2_ACCESS_KEY_ID` | `Fill in …` | R2 Access Key ID |
 | `R2_SECRET_ACCESS_KEY` | `Fill in …` | R2 Secret Access Key |
 | `R2_BUCKET_NAME` | `Fill in …` | 儲存桶名稱（**必填**） |
@@ -363,13 +363,17 @@ docker run --rm -p 5000:5000 \
 
 | 路徑 | 用途 |
 |------|------|
-| `app.py` | 入口啟動器 → 以 `uv run` 執行 `src/app.py` |
-| `src/app.py` | Flask：下載／驗證／轉碼／上傳流程 |
-| `src/config.py` | 設定（R2、TTL、編碼、路徑）；載入 `.env` |
-| `src/r2.py` | R2 上傳、公開網址、過期清理 |
-| `src/hwaccel.py` | 硬體編碼器偵測與 ffmpeg 參數（CBR／VBR） |
+| `app.py` | 入口啟動器 → `uv run` → uvicorn + FastAPI |
+| `src/bili2vrc/main.py` | FastAPI 應用、lifespan、靜態 SPA |
+| `src/bili2vrc/config.py` | 設定（R2、TTL、編碼、路徑）；載入 `.env` |
+| `src/bili2vrc/api/` | REST + SSE 路由（`/api/*`） |
+| `src/bili2vrc/services/` | 格式取得、下載上傳流程、任務控制 |
+| `src/bili2vrc/media/` | ffmpeg 轉碼、MP4 驗證／faststart |
+| `src/bili2vrc/download/` | yt-dlp、Cookie、aria2c |
+| `src/bili2vrc/storage/r2.py` | R2 上傳、公開 URL、過期清理 |
+| `src/bili2vrc/encoding/hwaccel.py` | 硬體編碼器偵測與 ffmpeg 參數 |
 | `frontend/` | Nuxt 4 SPA（`bun run generate` 或 `bun run dev`） |
-| `frontend/.output/public` | 建置後靜態檔，由 Flask 提供 |
+| `frontend/.output/public` | 建置後靜態檔，由 FastAPI 提供 |
 | `pyproject.toml`／`uv.lock` | Python 專案與鎖定依賴（uv） |
 | `requirements.txt` | 傳統 pip 清單（與主要依賴對照） |
 | `start.sh`／`start.bat` | 自動安裝 uv／Bun、建置前端、`uv run app.py` |
@@ -384,7 +388,7 @@ docker run --rm -p 5000:5000 \
 
 | 狀況 | 檢查 |
 |------|------|
-| 提示 `請設定 R2 環境變數` | 填好 `src/config.py` 或環境變數／`.env`，勿保留 `Fill in …` |
+| 提示 `請設定 R2 環境變數` | 填好 `src/bili2vrc/config.py` 或環境變數／`.env`，勿保留 `Fill in …` |
 | 上傳失敗（403／簽章錯誤） | 重建 API Token；確認 bucket 名稱與權限 |
 | 完成後沒有 HTTP 網址 | 設定 `R2_PUBLIC_BASE_URL`；在 bucket **Settings → Custom Domains** 綁定網域（或開啟 Public Development URL） |
 | YouTube 獲取格式失敗 | 安裝 Node.js，確認 `node -version` |

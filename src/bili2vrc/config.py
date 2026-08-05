@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# repo root: src/bili2vrc/config.py → ../../..
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def is_set(value: str) -> bool:
@@ -25,21 +26,17 @@ def _with_https(url: str) -> str:
 
 
 # ── Cloudflare R2（S3-compatible API / S3 相容 API）──
-# Replace quoted defaults below, or use env vars / 請改下方引號內的值，或改用環境變數
 CF_ACCOUNT_ID        = os.environ.get("CF_ACCOUNT_ID", "Fill in CF Account ID here")
 R2_ACCESS_KEY_ID     = os.environ.get("R2_ACCESS_KEY_ID", "Fill in R2 Access Key ID here")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "Fill in R2 Secret Access Key here")
 R2_BUCKET_NAME       = os.environ.get("R2_BUCKET_NAME", "Fill in R2 bucket name here")
 
-# Optional public URL (R2.dev or custom domain) / 選填：公開網址（R2.dev 或自訂網域）
-# 可只填網域；載入時若無 http(s):// 會自動加上 https://
 R2_PUBLIC_BASE_URL = _with_https(
     os.environ.get("R2_PUBLIC_BASE_URL", "Fill in R2 public URL here (optional)")
 )
 
-# Expired-object cleanup via metadata expires / 過期檔案清理（依 metadata expires 刪除）
 R2_CLEANUP_ENABLED   = os.environ.get("R2_CLEANUP_ENABLED", "1").lower() in ("1", "true", "yes", "on")
-R2_CLEANUP_INTERVAL  = int(os.environ.get("R2_CLEANUP_INTERVAL", "3600"))  # seconds / 秒
+R2_CLEANUP_INTERVAL  = int(os.environ.get("R2_CLEANUP_INTERVAL", "3600"))
 
 # ── Local paths / 本地路徑 ──
 TEMP_DIR     = os.path.join(BASE_DIR, "temp")
@@ -49,7 +46,7 @@ FRONTEND_DIST = os.environ.get(
 )
 
 # ── Defaults / 預設值 ──
-MAX_TTL = int(os.environ.get("MAX_TTL", "2592000"))  # max retention (30 days); 0 = no cap / 最長保存；0 = 不限制
+MAX_TTL = int(os.environ.get("MAX_TTL", "2592000"))
 
 
 def effective_ttl(ttl_seconds: int) -> int:
@@ -60,13 +57,10 @@ def effective_ttl(ttl_seconds: int) -> int:
     return ttl
 
 
-DEFAULT_TTL = effective_ttl(int(os.environ.get("DEFAULT_TTL", "604800")))  # 7 days (seconds) / 7 天（秒）
+DEFAULT_TTL = effective_ttl(int(os.environ.get("DEFAULT_TTL", "604800")))
 DEFAULT_BITRATE_KBPS = int(os.environ.get("DEFAULT_BITRATE_KBPS", "3000"))
 MIN_BITRATE_KBPS = int(os.environ.get("MIN_BITRATE_KBPS", "500"))
-MAX_BITRATE_KBPS = int(os.environ.get("MAX_BITRATE_KBPS", "50000"))  # 0 = no cap
-# When speeding: bitrate (CBR target / VBR ceiling) = base × speed × factor
-# Only when client sends scale_bitrate_with_speed=true (「原始」碼率).
-# Custom CBR/VBR presets send false so bitrate is not × speed.
+MAX_BITRATE_KBPS = int(os.environ.get("MAX_BITRATE_KBPS", "50000"))
 SPEED_BITRATE_FACTOR = float(os.environ.get("SPEED_BITRATE_FACTOR", "1.0"))
 CBR_BITRATE_PRESETS_KBPS = (2000, 4000, 5000, 6000, 8000, 10000)
 
@@ -75,7 +69,6 @@ DEFAULT_ENCODE_MODE = os.environ.get("DEFAULT_ENCODE_MODE", "vbr").strip().lower
 if DEFAULT_ENCODE_MODE not in ENCODE_MODES:
     DEFAULT_ENCODE_MODE = "vbr"
 
-# Lower CRF/CQ/global_quality = higher visual quality (ffmpeg convention).
 ENCODE_QUALITY_PRESETS: dict[str, dict[str, int]] = {
     "high": {"crf": 17, "cq": 17, "qsv": 18, "vt_q": 72},
     "balanced": {"crf": 19, "cq": 19, "qsv": 20, "vt_q": 65},
@@ -86,7 +79,6 @@ DEFAULT_ENCODE_QUALITY = os.environ.get("DEFAULT_ENCODE_QUALITY", "balanced").st
 if DEFAULT_ENCODE_QUALITY not in ENCODE_QUALITY_PRESETS:
     DEFAULT_ENCODE_QUALITY = "balanced"
 
-# QSV/AMF VBR: ICQ/QP ignores maxrate, so quality maps to average target ÷ ceiling.
 ENCODE_VBR_TARGET_RATIO: dict[str, float] = {
     "high": 0.90,
     "balanced": 0.75,
@@ -110,7 +102,6 @@ def encode_quality_params(quality) -> dict[str, int]:
 
 
 def vbr_target_kbps(ceiling_kbps, quality) -> int:
-    """Average VBR target under a hard maxrate ceiling (for encoders that ignore ICQ caps)."""
     ceiling = clamp_bitrate_kbps(ceiling_kbps)
     ratio = ENCODE_VBR_TARGET_RATIO.get(normalize_encode_quality(quality), 0.75)
     if ratio <= 0:
@@ -121,7 +112,6 @@ def vbr_target_kbps(ceiling_kbps, quality) -> int:
 
 
 def clamp_bitrate_kbps(bitrate_kbps) -> int:
-    """Clamp H.264 video bitrate (kbps) for transcode requests."""
     try:
         bitrate = int(bitrate_kbps)
     except (TypeError, ValueError):
@@ -134,10 +124,6 @@ def clamp_bitrate_kbps(bitrate_kbps) -> int:
 
 
 def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
-    """
-    CBR target / VBR ceiling when speeding: base × speed × SPEED_BITRATE_FACTOR.
-    Visual quality is controlled separately via encode_quality (CRF/CQ).
-    """
     base = clamp_bitrate_kbps(bitrate_kbps)
     try:
         speed = float(playback_speed)
@@ -147,11 +133,13 @@ def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
         return base
     factor = SPEED_BITRATE_FACTOR if SPEED_BITRATE_FACTOR > 0 else 1.0
     return clamp_bitrate_kbps(int(round(base * speed * factor)))
-HOST         = os.environ.get("HOST", "0.0.0.0")             # bind address / 綁定位址
-PORT         = int(os.environ.get("PORT", "5000"))             # HTTP port / HTTP 連接埠
-HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")           # auto | libx264 | h264_videotoolbox, etc.
-LOG_LEVEL    = os.environ.get("LOG_LEVEL", "INFO")           # Python log level / 日誌級別
-COOKIE_MAX_BYTES = int(os.environ.get("COOKIE_MAX_BYTES", "65536"))  # max cookie payload per request / 單次 Cookie 上限
-DISABLE_ARIA2C   = os.environ.get("DISABLE_ARIA2C", "").lower() in ("1", "true", "yes", "on")  # disable aria2c / 停用 aria2c
+
+
+HOST         = os.environ.get("HOST", "0.0.0.0")
+PORT         = int(os.environ.get("PORT", "5000"))
+HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")
+LOG_LEVEL    = os.environ.get("LOG_LEVEL", "INFO")
+COOKIE_MAX_BYTES = int(os.environ.get("COOKIE_MAX_BYTES", "65536"))
+DISABLE_ARIA2C   = os.environ.get("DISABLE_ARIA2C", "").lower() in ("1", "true", "yes", "on")
 
 os.makedirs(TEMP_DIR, exist_ok=True)

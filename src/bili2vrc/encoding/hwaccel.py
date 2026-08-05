@@ -12,7 +12,7 @@ import sys
 from dataclasses import dataclass, field
 from functools import lru_cache
 
-import config
+from bili2vrc import config
 
 logger = logging.getLogger("bili2vrchat.hwaccel")
 

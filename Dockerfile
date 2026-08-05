@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project
 
 COPY app.py ./
-COPY src/ ./src/
+COPY src/bili2vrc/ ./src/bili2vrc/
 COPY --from=frontend-build /frontend/.output/public ./frontend/.output/public
 COPY cookies/README.md cookies/
 

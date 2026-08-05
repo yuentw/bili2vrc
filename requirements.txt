@@ -1,4 +1,6 @@
-flask>=3.0
-requests>=2.31
+fastapi>=0.141.1
+uvicorn[standard]>=0.30
 boto3>=1.34
+python-dotenv>=1.2.2
+requests>=2.31
 yt-dlp>=2026.7.4
