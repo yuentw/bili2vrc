@@ -378,6 +378,28 @@
     }
     .xp-hint { font-size: 10px; color: #316ac5; margin-top: 4px; }
     .xp-hint-warn { color: #804000; font-weight: bold; }
+
+    .crf-label-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .crf-value {
+      font-weight: bold;
+      color: #0a246a;
+    }
+    .crf-slider {
+      width: 100%;
+      margin-top: 2px;
+    }
+    .crf-range-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2px;
+      font-size: 10px;
+      color: #808080;
+    }
     #previewVideo {
       width: 100%;
       max-height: 240px;

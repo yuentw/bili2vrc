@@ -352,16 +352,23 @@ function copyRetroUrl() {
                     </select>
                   </div>
                   <div class="field-col">
-                    <label class="xp-label" for="encodeCrf">{{ app.encodeCrfLabel }}:</label>
+                    <label class="xp-label crf-label-row" for="encodeCrf">
+                      <span>{{ app.encodeCrfLabel }}</span>
+                      <span class="crf-value">{{ app.encodeCrf }}</span>
+                    </label>
                     <input
-                      class="xp-input"
-                      type="number"
+                      class="crf-slider"
+                      type="range"
                       id="encodeCrf"
                       v-model.number="app.encodeCrf"
                       :min="app.encodeCrfConfig.min"
                       :max="app.encodeCrfConfig.max"
                       step="1"
                     >
+                    <div class="crf-range-labels">
+                      <span>{{ app.crfRangeLabels.low }}</span>
+                      <span>{{ app.crfRangeLabels.high }}</span>
+                    </div>
                     <div class="xp-hint">{{ app.encodeCrfConfig.hint }}</div>
                   </div>
                 </div>

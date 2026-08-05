@@ -348,7 +348,7 @@ function onResultVideoLoad() {
             <div class="field field-full">
               <label class="compat-check">
                 <input type="checkbox" v-model="app.compatMode">
-                <span>VRChat 相容模式 — 強制編碼為 H.264（修復固定時間點撕裂，較慢）</span>
+                <span>相容模式 — 強制編碼為 H.264（確保所有玩家都能播放，較慢）</span>
               </label>
             </div>
           </div>
@@ -384,14 +384,22 @@ function onResultVideoLoad() {
                 </select>
               </div>
               <div class="field">
-                <label>{{ app.encodeCrfLabel }}</label>
+                <label class="crf-label-row">
+                  <span>{{ app.encodeCrfLabel }}</span>
+                  <span class="crf-value">{{ app.encodeCrf }}</span>
+                </label>
                 <input
-                  type="number"
+                  type="range"
+                  class="crf-slider"
                   v-model.number="app.encodeCrf"
                   :min="app.encodeCrfConfig.min"
                   :max="app.encodeCrfConfig.max"
                   step="1"
                 >
+                <div class="crf-range-labels">
+                  <span>{{ app.crfRangeLabels.low }}</span>
+                  <span>{{ app.crfRangeLabels.high }}</span>
+                </div>
                 <div class="field-hint">{{ app.encodeCrfConfig.hint }}</div>
               </div>
               <div class="field">

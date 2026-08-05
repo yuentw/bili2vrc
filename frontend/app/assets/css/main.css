@@ -344,6 +344,35 @@
       color: var(--warn);
       font-weight: 600;
     }
+    .crf-label-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .crf-value {
+      font-size: var(--fs);
+      font-weight: 700;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+    .crf-slider {
+      width: 100%;
+      accent-color: var(--accent);
+      min-height: var(--touch);
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .crf-range-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+      font-size: var(--fs-sm);
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
     .field input:not([type="checkbox"]),
     .field select {
       width: 100%;

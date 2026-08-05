@@ -7,6 +7,7 @@ import {
 } from './useFormatUtils'
 import {
   ENCODE_CRF_CONFIG,
+  CRF_RANGE_LABELS,
   clampEncodeCrf,
   defaultEncodeCrfByCodec,
   normalizeOutputCodecKey,
@@ -593,6 +594,7 @@ export function useBili2Vrc() {
     encodeCrf,
     encodeCrfConfig,
     encodeCrfLabel,
+    crfRangeLabels: CRF_RANGE_LABELS,
     encodeQuality,
     compatMode,
     allFormats,
