@@ -250,6 +250,17 @@ function onResultVideoLoad() {
                 <option :value="2">2.0x（快速）</option>
               </select>
             </div>
+            <div class="field">
+              <label>影片位元率（重新編碼時）</label>
+              <select v-model.number="app.bitrateKbps">
+                <option :value="1500">1500 kbps</option>
+                <option :value="2000">2000 kbps</option>
+                <option :value="3000">3000 kbps</option>
+                <option :value="4000">4000 kbps</option>
+                <option :value="5000">5000 kbps</option>
+                <option :value="8000">8000 kbps</option>
+              </select>
+            </div>
             <div class="field field-full">
               <label class="compat-check">
                 <input type="checkbox" v-model="app.compatMode">

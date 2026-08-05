@@ -80,6 +80,38 @@ QSV_INIT_CANDIDATES: list[list[str]] = [
 ]
 
 
+def video_encode_args(encoder_name: str, bitrate_kbps: int) -> list[str]:
+    """ffmpeg -c:v args with target video bitrate (kbps)."""
+    kbps = max(1, int(bitrate_kbps))
+    bitrate = f"{kbps}k"
+    maxrate = f"{max(kbps, int(kbps * 1.2))}k"
+    bufsize = f"{kbps * 2}k"
+    profile = ["-profile:v", "main"]
+
+    if encoder_name == "libx264":
+        return [
+            "-preset", "fast", *profile, "-level:v", "4.1",
+            "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+        ]
+    if encoder_name == "h264_nvenc":
+        return [
+            "-preset", "p4", "-rc", "vbr", *profile,
+            "-b:v", bitrate, "-maxrate", maxrate,
+        ]
+    if encoder_name == "h264_videotoolbox":
+        return [*profile, "-b:v", bitrate]
+    if encoder_name == "h264_vaapi":
+        return [*profile, "-b:v", bitrate, "-maxrate", maxrate]
+    if encoder_name == "h264_qsv":
+        return [*profile, "-look_ahead", "0", "-b:v", bitrate, "-maxrate", maxrate]
+    if encoder_name == "h264_amf":
+        return ["-quality", "balanced", *profile, "-b:v", bitrate]
+    return [
+        "-preset", "fast", *profile,
+        "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+    ]
+
+
 def _platform_candidates(gpus: list[str]) -> list[str]:
     """Order encoder probes by installed GPUs (Intel-only → QSV first)."""
     base = list(PLATFORM_CANDIDATES.get(_platform_key(), []))
@@ -234,7 +266,7 @@ def _smoke_test_encoder(encoder: VideoEncoder) -> tuple[bool, str]:
         "-i", "testsrc2=duration=0.2:size=640x360:rate=30",
         "-vf", compose_video_filter(1.0, encoder),
         "-c:v", encoder.name,
-        *encoder.video_args,
+        *video_encode_args(encoder.name, config.DEFAULT_BITRATE_KBPS),
         "-frames:v", "3",
         "-f", "null",
         "-",

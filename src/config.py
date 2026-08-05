@@ -61,6 +61,22 @@ def effective_ttl(ttl_seconds: int) -> int:
 
 
 DEFAULT_TTL = effective_ttl(int(os.environ.get("DEFAULT_TTL", "604800")))  # 7 days (seconds) / 7 天（秒）
+DEFAULT_BITRATE_KBPS = int(os.environ.get("DEFAULT_BITRATE_KBPS", "3000"))
+MIN_BITRATE_KBPS = int(os.environ.get("MIN_BITRATE_KBPS", "500"))
+MAX_BITRATE_KBPS = int(os.environ.get("MAX_BITRATE_KBPS", "50000"))  # 0 = no cap
+
+
+def clamp_bitrate_kbps(bitrate_kbps) -> int:
+    """Clamp H.264 video bitrate (kbps) for transcode requests."""
+    try:
+        bitrate = int(bitrate_kbps)
+    except (TypeError, ValueError):
+        bitrate = DEFAULT_BITRATE_KBPS
+    if bitrate < MIN_BITRATE_KBPS:
+        return MIN_BITRATE_KBPS
+    if MAX_BITRATE_KBPS > 0 and bitrate > MAX_BITRATE_KBPS:
+        return MAX_BITRATE_KBPS
+    return bitrate
 HOST         = os.environ.get("HOST", "0.0.0.0")             # bind address / 綁定位址
 PORT         = int(os.environ.get("PORT", "5000"))             # HTTP port / HTTP 連接埠
 HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")           # auto | libx264 | h264_videotoolbox, etc.

@@ -483,6 +483,7 @@ def transcode_h264(
     emit_fn,
     *,
     playback_speed: float = 1.0,
+    bitrate_kbps: int | None = None,
     cancel_event: threading.Event | None = None,
     register_proc=None,
 ) -> bool:
@@ -491,6 +492,9 @@ def transcode_h264(
     硬體編碼失敗時自動回退 libx264。
     """
     speed = clamp_playback_speed(float(playback_speed))
+    video_bitrate = config.clamp_bitrate_kbps(
+        bitrate_kbps if bitrate_kbps is not None else config.DEFAULT_BITRATE_KBPS,
+    )
     has_audio = _probe_has_audio(src)
     source_fps = hwaccel.probe_video_fps(src)
     step = "stretch" if abs(speed - 1.0) > 1e-6 else "reencode"
@@ -508,6 +512,7 @@ def transcode_h264(
         source_fps=source_fps,
         step=step,
         encoders=encoders_to_try,
+        bitrate_kbps=video_bitrate,
         cancel_event=cancel_event,
         register_proc=register_proc,
     )
@@ -523,6 +528,7 @@ def _transcode_h264_try(
     source_fps: float,
     step: str,
     encoders: list,
+    bitrate_kbps: int,
     cancel_event: threading.Event | None,
     register_proc,
 ) -> bool:
@@ -564,7 +570,7 @@ def _transcode_h264_try(
         else:
             cmd += ["-vf", video_filter, "-an"]
 
-        cmd += ["-c:v", encoder.name, *encoder.video_args]
+        cmd += ["-c:v", encoder.name, *hwaccel.video_encode_args(encoder.name, bitrate_kbps)]
         # QSV only: pin safe constant fps (avoids "frame rate unsupported" after setpts)
         if encoder.name == "h264_qsv":
             out_fps = hwaccel.snap_fps_for_encoder(encoder, source_fps or 30)
@@ -574,8 +580,8 @@ def _transcode_h264_try(
         cmd += ["-movflags", "+faststart", dst]
 
         logger.info(
-            "transcode start: encoder=%s speed=%sx fps_in=%.3f audio=%s src=%s",
-            encoder.name, speed, source_fps or 0, has_audio, os.path.basename(src),
+            "transcode start: encoder=%s speed=%sx bitrate=%skbps fps_in=%.3f audio=%s src=%s",
+            encoder.name, speed, bitrate_kbps, source_fps or 0, has_audio, os.path.basename(src),
         )
         ok, err_tail = _run_ffmpeg_transcode(
             cmd,
@@ -760,7 +766,8 @@ def fetch_formats():
 # ──────────────────────────────────────────────
 
 def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
-               compat_mode: bool, playback_speed: float, cookie_path: str | None,
+               compat_mode: bool, playback_speed: float, bitrate_kbps: int,
+               cookie_path: str | None,
                job_id: str, cancel_event: threading.Event, q: queue.Queue):
     """在子執行緒中執行；用 q 回傳進度事件"""
 
@@ -790,8 +797,9 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
 
     try:
         logger.info(
-            "process start: job=%s url=%s format_id=%s ttl=%s compat=%s speed=%sx",
+            "process start: job=%s url=%s format_id=%s ttl=%s compat=%s speed=%sx bitrate=%skbps",
             job_id, url, format_id, ttl, compat_mode, clamp_playback_speed(playback_speed),
+            bitrate_kbps,
         )
         if abort_if_cancelled():
             return
@@ -944,6 +952,7 @@ def do_process(url: str, format_id: str, key_phrase: str, ttl: int,
                 out_path,
                 emit,
                 playback_speed=speed,
+                bitrate_kbps=bitrate_kbps,
                 cancel_event=cancel_event,
                 register_proc=register_proc,
             )
@@ -1074,6 +1083,7 @@ def process():
         )
     compat_mode = bool(data.get("compat_mode", False))
     playback_speed = clamp_playback_speed(float(data.get("playback_speed", 1) or 1))
+    bitrate_kbps = config.clamp_bitrate_kbps(data.get("bitrate_kbps", config.DEFAULT_BITRATE_KBPS))
     cookie_content = (data.get("cookie_content") or "").strip() or None
 
     if not url or not format_id:
@@ -1092,8 +1102,8 @@ def process():
             return jsonify({"error": str(exc)}), 400
 
     logger.info(
-        "api/process: format_id=%s ttl=%s compat=%s speed=%sx platform=%s cookie_used=%s",
-        format_id, ttl, compat_mode, playback_speed, url_platform, bool(cookie_content),
+        "api/process: format_id=%s ttl=%s compat=%s speed=%sx bitrate=%skbps platform=%s cookie_used=%s",
+        format_id, ttl, compat_mode, playback_speed, bitrate_kbps, url_platform, bool(cookie_content),
     )
 
     q = queue.Queue()
@@ -1102,7 +1112,7 @@ def process():
 
     t = threading.Thread(
         target=do_process,
-        args=(url, format_id, key_phrase, ttl, compat_mode, playback_speed,
+        args=(url, format_id, key_phrase, ttl, compat_mode, playback_speed, bitrate_kbps,
               cookie_path, job_id, cancel_event, q),
         daemon=True,
     )

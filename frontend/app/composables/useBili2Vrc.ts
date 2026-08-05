@@ -16,6 +16,7 @@ export function useBili2Vrc() {
   const keyPhrase = ref('')
   const ttl = ref(604800)
   const playbackSpeed = ref(1)
+  const bitrateKbps = ref(3000)
   const compatMode = ref(false)
 
   const allFormats = ref<VideoFormat[]>([])
@@ -303,6 +304,7 @@ export function useBili2Vrc() {
             ttl: Number(ttl.value),
             compat_mode: Boolean(compatMode.value),
             playback_speed: Number(playbackSpeed.value) || 1,
+            bitrate_kbps: Number(bitrateKbps.value) || 3000,
           }),
         ),
       })
@@ -442,6 +444,7 @@ export function useBili2Vrc() {
     keyPhrase,
     ttl,
     playbackSpeed,
+    bitrateKbps,
     compatMode,
     allFormats,
     filteredFormats,
