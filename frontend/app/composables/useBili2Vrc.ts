@@ -14,7 +14,7 @@ export function useBili2Vrc() {
 
   const urlInput = ref('')
   const keyPhrase = ref('')
-  const ttl = ref(604800)
+  const ttl = ref(3600)
   const playbackSpeed = ref(1)
   const bitrateKbps = ref(3000)
   const sourceBitrateKbps = ref<number | null>(null)
