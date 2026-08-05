@@ -24,6 +24,13 @@ import hwaccel
 import r2
 
 app = Flask(__name__)
+
+
+@app.after_request
+def _add_clipboard_permissions_policy(response: Response):
+    # Allow Clipboard API permission prompts (HTTPS / localhost only).
+    response.headers["Permissions-Policy"] = "clipboard-read=(self), clipboard-write=(self)"
+    return response
 logger = logging.getLogger("bili2vrchat")
 
 PLAYBACK_SPEED_MIN = 0.5

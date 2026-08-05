@@ -10,12 +10,18 @@ import {
 
 useHead({
   title: 'bili2vrchat — B站上傳工具',
-  meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }],
+  meta: [
+    { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
+    { 'http-equiv': 'Permissions-Policy', content: 'clipboard-read=(self), clipboard-write=(self)' },
+  ],
 })
 
 const app = reactive(useBili2Vrc())
 const cookieFileInput = ref<HTMLInputElement | null>(null)
 const previewVideo = ref<HTMLVideoElement | null>(null)
+const urlInputEl = ref<HTMLInputElement | null>(null)
+const pasteWaiting = ref(false)
+let pasteWaitCleanup: (() => void) | null = null
 
 onMounted(() => {
   app.loadHwaccelStatus()
@@ -32,6 +38,11 @@ onMounted(() => {
   }
 })
 
+onBeforeUnmount(() => {
+  pasteWaitCleanup?.()
+  pasteWaitCleanup = null
+})
+
 function onCookieFileChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -45,19 +56,73 @@ function onUrlKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter') app.fetchFormats()
 }
 
-async function pasteAndFetch() {
-  if (app.fetchLoading) return
+async function requestClipboardReadPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> {
+  if (!window.isSecureContext || !navigator.permissions?.query) return 'unknown'
   try {
-    const text = (await navigator.clipboard.readText()).trim()
-    if (!text) {
-      alert('剪貼簿是空的')
-      return
-    }
-    app.onUrlInput(text)
-    await app.fetchFormats()
+    const status = await navigator.permissions.query({
+      name: 'clipboard-read' as PermissionName,
+    })
+    return status.state as 'granted' | 'denied' | 'prompt'
   } catch {
-    alert('無法讀取剪貼簿，請允許貼上權限，或手動貼上網址')
+    // Firefox / Safari may not expose clipboard-read in Permissions API.
+    return 'unknown'
   }
+}
+
+function waitForManualPaste(): Promise<string | null> {
+  pasteWaitCleanup?.()
+  pasteWaiting.value = true
+  urlInputEl.value?.focus()
+  urlInputEl.value?.select()
+
+  return new Promise((resolve) => {
+    const finish = (value: string | null) => {
+      window.clearTimeout(timer)
+      window.removeEventListener('paste', onPaste, true)
+      window.removeEventListener('keydown', onKey, true)
+      pasteWaiting.value = false
+      pasteWaitCleanup = null
+      resolve(value)
+    }
+    const onPaste = (event: ClipboardEvent) => {
+      const text = event.clipboardData?.getData('text')?.trim() || ''
+      if (!text) return
+      event.preventDefault()
+      finish(text)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') finish(null)
+    }
+    const timer = window.setTimeout(() => finish(null), 15000)
+    pasteWaitCleanup = () => finish(null)
+    window.addEventListener('paste', onPaste, true)
+    window.addEventListener('keydown', onKey, true)
+  })
+}
+
+async function pasteAndFetch() {
+  if (app.fetchLoading || pasteWaiting.value) return
+
+  let text = ''
+  if (window.isSecureContext && navigator.clipboard?.readText) {
+    const permission = await requestClipboardReadPermission()
+    if (permission !== 'denied') {
+      try {
+        // Triggers the browser clipboard permission prompt when state is "prompt".
+        text = (await navigator.clipboard.readText()).trim()
+      } catch {
+        /* fall through to Ctrl+V */
+      }
+    }
+  }
+
+  if (!text) {
+    text = (await waitForManualPaste()) || ''
+    if (!text) return
+  }
+
+  app.onUrlInput(text)
+  await app.fetchFormats()
 }
 
 function onPreviewSpeedInput(event: Event) {
@@ -84,6 +149,7 @@ function onResultVideoLoad() {
         <div class="section-body">
           <div class="url-row">
             <input
+              ref="urlInputEl"
               type="text"
               v-model="app.urlInput"
               placeholder="B站或 YouTube 網址，如 bilibili.com/video/... 或 youtube.com/watch?v=..."
@@ -98,7 +164,7 @@ function onResultVideoLoad() {
               :disabled="app.fetchLoading"
               @click="pasteAndFetch"
             >
-              貼上
+              {{ pasteWaiting ? '請按 Ctrl+V…' : '貼上' }}
             </button>
             <button
               class="btn btn-primary"
