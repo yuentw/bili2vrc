@@ -16,7 +16,7 @@ export interface VideoMeta {
   duration_formatted?: string
 }
 
-const CODEC_ORDER = ['av1', 'h264', 'h265', 'vp9', 'other']
+const CODEC_ORDER = ['av1', 'vp9', 'h264', 'h265', 'other']
 
 export const DEFAULT_CODEC_FAMILY = 'av1'
 
