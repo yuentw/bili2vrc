@@ -16,7 +16,6 @@ import time
 import urllib.parse
 from contextlib import contextmanager
 
-import requests
 from flask import Flask, Response, abort, jsonify, request, send_from_directory
 
 import config
