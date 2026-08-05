@@ -83,34 +83,41 @@ QSV_INIT_CANDIDATES: list[list[str]] = [
 
 
 def video_encode_args(encoder_name: str, bitrate_kbps: int) -> list[str]:
-    """ffmpeg -c:v args with target video bitrate (kbps)."""
+    """ffmpeg -c:v args: quality-oriented with bitrate as target / ceiling."""
     kbps = max(1, int(bitrate_kbps))
     bitrate = f"{kbps}k"
-    maxrate = f"{max(kbps, int(kbps * 1.2))}k"
+    # Allow short peaks above average (helps sharp detail after speed re-encode).
+    maxrate = f"{max(kbps, int(kbps * 1.5))}k"
     bufsize = f"{kbps * 2}k"
     profile = ["-profile:v", "main"]
 
     if encoder_name == "libx264":
         return [
             "-preset", "fast", *profile, "-level:v", "4.1",
-            "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+            "-crf", "18",
+            "-maxrate", maxrate, "-bufsize", bufsize,
         ]
     if encoder_name == "h264_nvenc":
         return [
-            "-preset", "p4", "-rc", "vbr", *profile,
-            "-b:v", bitrate, "-maxrate", maxrate,
+            "-preset", "p5", "-rc", "vbr", "-cq", "19", *profile,
+            "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
         ]
     if encoder_name == "h264_videotoolbox":
-        return [*profile, "-b:v", bitrate]
+        return [*profile, "-b:v", bitrate, "-maxrate", maxrate]
     if encoder_name == "h264_vaapi":
         return [*profile, "-b:v", bitrate, "-maxrate", maxrate]
     if encoder_name == "h264_qsv":
-        return [*profile, "-look_ahead", "0", "-b:v", bitrate, "-maxrate", maxrate]
+        # Lower global_quality = higher quality (ICQ-style).
+        return [
+            *profile, "-look_ahead", "1",
+            "-global_quality", "20",
+            "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+        ]
     if encoder_name == "h264_amf":
-        return ["-quality", "balanced", *profile, "-b:v", bitrate]
+        return ["-quality", "quality", *profile, "-b:v", bitrate, "-maxrate", maxrate]
     return [
         "-preset", "fast", *profile,
-        "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+        "-crf", "18", "-maxrate", maxrate, "-bufsize", bufsize,
     ]
 
 

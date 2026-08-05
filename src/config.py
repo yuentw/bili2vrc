@@ -64,6 +64,8 @@ DEFAULT_TTL = effective_ttl(int(os.environ.get("DEFAULT_TTL", "604800")))  # 7 d
 DEFAULT_BITRATE_KBPS = int(os.environ.get("DEFAULT_BITRATE_KBPS", "3000"))
 MIN_BITRATE_KBPS = int(os.environ.get("MIN_BITRATE_KBPS", "500"))
 MAX_BITRATE_KBPS = int(os.environ.get("MAX_BITRATE_KBPS", "50000"))  # 0 = no cap
+# Extra headroom when re-encoding for speed (H.264 + HW encoders look softer than source).
+SPEED_BITRATE_FACTOR = float(os.environ.get("SPEED_BITRATE_FACTOR", "1.5"))
 
 
 def clamp_bitrate_kbps(bitrate_kbps) -> int:
@@ -81,8 +83,8 @@ def clamp_bitrate_kbps(bitrate_kbps) -> int:
 
 def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
     """
-    Encode target: base bitrate × playback speed when speeding up/down.
-    Keeps similar quality per second of output timeline after setpts.
+    Encode target when speeding: base × speed × SPEED_BITRATE_FACTOR.
+    Same timeline density as source, plus headroom for H.264 re-encode loss.
     """
     base = clamp_bitrate_kbps(bitrate_kbps)
     try:
@@ -91,7 +93,8 @@ def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
         speed = 1.0
     if abs(speed - 1.0) <= 1e-6:
         return base
-    return clamp_bitrate_kbps(int(round(base * speed)))
+    factor = SPEED_BITRATE_FACTOR if SPEED_BITRATE_FACTOR > 0 else 1.0
+    return clamp_bitrate_kbps(int(round(base * speed * factor)))
 HOST         = os.environ.get("HOST", "0.0.0.0")             # bind address / 綁定位址
 PORT         = int(os.environ.get("PORT", "5000"))             # HTTP port / HTTP 連接埠
 HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")           # auto | libx264 | h264_videotoolbox, etc.

@@ -501,8 +501,8 @@ def transcode_h264(
     video_bitrate = config.effective_bitrate_kbps(base_bitrate, speed)
     if video_bitrate != base_bitrate:
         logger.info(
-            "bitrate scaled for speed: base=%skbps × %sx → %skbps",
-            base_bitrate, speed, video_bitrate,
+            "bitrate scaled for speed: base=%skbps × %sx × factor=%s → %skbps",
+            base_bitrate, speed, config.SPEED_BITRATE_FACTOR, video_bitrate,
         )
     has_audio = _probe_has_audio(src)
     source_fps = hwaccel.probe_video_fps(src)

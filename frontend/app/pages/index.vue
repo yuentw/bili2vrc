@@ -271,8 +271,8 @@ function onResultVideoLoad() {
                 v-if="Number(app.playbackSpeed) !== 1"
                 class="field-hint"
               >
-                倍速實際編碼：{{ app.effectiveBitrateKbps }} kbps
-                （選取值 × {{ app.playbackSpeed }}x）
+                倍速實際編碼：約 {{ app.effectiveBitrateKbps }} kbps
+                （選取值 × {{ app.playbackSpeed }}x × 1.5 畫質補償）
               </div>
             </div>
             <div class="field field-full">

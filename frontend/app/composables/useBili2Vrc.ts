@@ -30,7 +30,9 @@ export function useBili2Vrc() {
     const base = Number(bitrateKbps.value) || 3000
     const speed = Number(playbackSpeed.value) || 1
     if (Math.abs(speed - 1) < 1e-6) return Math.round(base)
-    return Math.max(500, Math.min(50000, Math.round(base * speed)))
+    // Keep in sync with config.SPEED_BITRATE_FACTOR (default 1.5)
+    const speedBitrateFactor = 1.5
+    return Math.max(500, Math.min(50000, Math.round(base * speed * speedBitrateFactor)))
   })
 
   const allFormats = ref<VideoFormat[]>([])
