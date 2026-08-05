@@ -65,7 +65,8 @@ DEFAULT_BITRATE_KBPS = int(os.environ.get("DEFAULT_BITRATE_KBPS", "3000"))
 MIN_BITRATE_KBPS = int(os.environ.get("MIN_BITRATE_KBPS", "500"))
 MAX_BITRATE_KBPS = int(os.environ.get("MAX_BITRATE_KBPS", "50000"))  # 0 = no cap
 # When speeding: bitrate (CBR target / VBR ceiling) = base × speed × factor
-# Skipped for CBR when client sends scale_bitrate_with_speed=false (non-source preset).
+# Only when client sends scale_bitrate_with_speed=true (「原始」碼率).
+# Custom CBR/VBR presets send false so bitrate is not × speed.
 SPEED_BITRATE_FACTOR = float(os.environ.get("SPEED_BITRATE_FACTOR", "1.0"))
 CBR_BITRATE_PRESETS_KBPS = (2000, 4000, 5000, 6000, 8000, 10000)
 

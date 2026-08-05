@@ -1142,7 +1142,7 @@ def process():
     bitrate_kbps = config.clamp_bitrate_kbps(data.get("bitrate_kbps", config.DEFAULT_BITRATE_KBPS))
     encode_quality = config.normalize_encode_quality(data.get("encode_quality"))
     encode_mode = config.normalize_encode_mode(data.get("encode_mode"))
-    # Default True; CBR non-source presets send False so bitrate is not × speed.
+    # Default True; custom CBR/VBR presets send False so bitrate is not × speed.
     if "scale_bitrate_with_speed" in data:
         scale_bitrate_with_speed = bool(data.get("scale_bitrate_with_speed"))
     else:

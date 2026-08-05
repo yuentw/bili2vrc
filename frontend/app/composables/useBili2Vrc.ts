@@ -40,18 +40,18 @@ export function useBili2Vrc() {
     const source = sourceBitrateKbps.value
     return source != null && Number(bitrateKbps.value) === source
   })
-  // CBR 選固定預設時不 × 倍速；原片 CBR / VBR 仍會 × 倍速
-  const scaleBitrateWithSpeed = computed(
-    () => encodeMode.value !== 'cbr' || usingSourceBitrate.value,
-  )
+  // 僅「原始」碼率才 × 倍速；自訂 CBR/VBR 預設維持選取值
+  const scaleBitrateWithSpeed = computed(() => usingSourceBitrate.value)
   const bitrateFieldHint = computed(() => {
+    if (usingSourceBitrate.value) {
+      return encodeMode.value === 'cbr'
+        ? '原片 CBR；倍速時會自動 × 倍速調整目標碼率'
+        : '原片 VBR 上限；倍速時會自動 × 倍速調整碼率上限'
+    }
     if (encodeMode.value === 'cbr') {
-      if (usingSourceBitrate.value) {
-        return '原片 CBR；倍速時會自動 × 倍速調整目標碼率'
-      }
       return '固定碼率；自訂預設不隨倍速調整碼率'
     }
-    return '以品質為主，並強制遵守碼率上限'
+    return '以品質為主並遵守碼率上限；自訂預設不隨倍速調整'
   })
   const bitrateSelectOptions = computed(() => {
     const source = sourceBitrateKbps.value

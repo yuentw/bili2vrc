@@ -45,6 +45,21 @@ function onUrlKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter') app.fetchFormats()
 }
 
+async function pasteAndFetch() {
+  if (app.fetchLoading) return
+  try {
+    const text = (await navigator.clipboard.readText()).trim()
+    if (!text) {
+      alert('剪貼簿是空的')
+      return
+    }
+    app.onUrlInput(text)
+    await app.fetchFormats()
+  } catch {
+    alert('無法讀取剪貼簿，請允許貼上權限，或手動貼上網址')
+  }
+}
+
 function onPreviewSpeedInput(event: Event) {
   const speed = parseFloat((event.target as HTMLInputElement).value)
   app.onPreviewSpeedChange(speed, previewVideo.value)
@@ -77,6 +92,14 @@ function onResultVideoLoad() {
               @input="app.onUrlInput(app.urlInput)"
               @keydown="onUrlKeydown"
             >
+            <button
+              class="btn btn-ghost"
+              type="button"
+              :disabled="app.fetchLoading"
+              @click="pasteAndFetch"
+            >
+              貼上
+            </button>
             <button
               class="btn btn-primary"
               :disabled="app.fetchLoading"
