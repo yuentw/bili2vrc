@@ -20,8 +20,10 @@ logger = logging.getLogger("bili2vrchat.hwaccel")
 VIDEO_FORMAT_FILTER = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p"
 # QSV prefers NV12 system-memory frames (avoids fragile hwupload on Windows).
 QSV_FORMAT_FILTER = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=nv12"
-# QSV rejects many fractional / intermediate rates (e.g. 45fps after 1.5x on 30fps).
-QSV_SAFE_FPS = (24, 25, 30, 50, 60)
+# Safe constant rates for HW encoders + VRChat / Unity VideoPlayer.
+# Intermediate rates after setpts (e.g. 45fps) cause tear / freeze / A-V desync.
+SAFE_OUTPUT_FPS = (24, 25, 30, 50, 60)
+QSV_SAFE_FPS = SAFE_OUTPUT_FPS
 
 ENCODER_PRESETS: dict[str, tuple[str, list[str], str | None]] = {
     # name -> (label, video_args after -c:v, optional extra vf after format normalize)
@@ -471,13 +473,16 @@ def probe_video_fps(filepath: str) -> float:
     return 0.0
 
 
+def resolve_output_fps(source_fps: float | None) -> int:
+    """Snap source fps to a player-safe constant rate (24/25/30/50/60)."""
+    base = float(source_fps) if source_fps and float(source_fps) > 1 else 30.0
+    return min(SAFE_OUTPUT_FPS, key=lambda candidate: abs(candidate - base))
+
+
 def snap_fps_for_encoder(encoder: VideoEncoder, source_fps: float) -> int:
-    """Pick an output fps the encoder accepts (especially QSV after setpts)."""
-    base = source_fps if source_fps > 1 else 30.0
-    if encoder.name != "h264_qsv":
-        # Keep near source; clamp to common integer for filter stability
-        return max(1, int(round(base)))
-    return min(QSV_SAFE_FPS, key=lambda candidate: abs(candidate - base))
+    """Pick an output fps the encoder / players accept (after setpts especially)."""
+    del encoder  # same safe table for NVENC, QSV, libx264, …
+    return resolve_output_fps(source_fps)
 
 
 def compose_video_filter(
@@ -487,16 +492,20 @@ def compose_video_filter(
     source_fps: float | None = None,
 ) -> str:
     """
-    Build video filter chain: optional speed + format + optional hw upload.
+    Build video filter chain: optional speed + CFR + format + optional hw upload.
 
-    QSV only: after setpts, force a safe fps (24/25/30/50/60). Otherwise NVENC etc.
-    keep the effective rate (e.g. 30fps @ 1.5x → ~45fps).
+    After setpts, always force constant fps then renumber PTS for ALL encoders.
+    Leaving NVENC on the effective rate (e.g. 30→45) commonly tears / freezes
+    video while audio keeps playing in VRChat and browsers.
     """
     parts: list[str] = []
+    out_fps = resolve_output_fps(source_fps)
     if abs(float(speed) - 1.0) > 1e-6:
         parts.append(f"setpts=PTS/{speed}")
-    if encoder.name == "h264_qsv":
-        out_fps = snap_fps_for_encoder(encoder, float(source_fps or 30))
+        parts.append(f"fps={out_fps}")
+        parts.append("setpts=PTS-STARTPTS")
+    elif encoder.name == "h264_qsv":
+        # QSV is picky about fractional rates even at 1x.
         parts.append(f"fps={out_fps}")
     parts.append(encoder.format_filter)
     if encoder.hw_video_filter:

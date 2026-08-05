@@ -416,7 +416,7 @@ def _probe_has_audio(filepath: str) -> bool:
 
 
 def _build_atempo_filter(speed: float) -> str:
-    """atempo only accepts 0.5–2.0; chain filters for safety."""
+    """atempo only accepts 0.5–2.0; chain filters + keep A/V sync after stretch."""
     speed = clamp_playback_speed(speed)
     parts: list[str] = []
     remaining = speed
@@ -427,6 +427,9 @@ def _build_atempo_filter(speed: float) -> str:
         parts.append("atempo=0.5")
         remaining /= 0.5
     parts.append(f"atempo={remaining:.6g}")
+    # Soft-resync + reset PTS so audio length tracks stretched video.
+    parts.append("aresample=async=1:first_pts=0")
+    parts.append("asetpts=PTS-STARTPTS")
     return ",".join(parts)
 
 
@@ -551,6 +554,7 @@ def _transcode_h264_try(
         video_filter = hwaccel.compose_video_filter(
             speed, encoder, source_fps=source_fps,
         )
+        out_fps = hwaccel.resolve_output_fps(source_fps)
         decode_args = hwaccel.decode_hwaccel_args(encoder)
         cmd = [
             "ffmpeg", "-hide_banner", "-y",
@@ -559,7 +563,8 @@ def _transcode_h264_try(
             "-i", src,
         ]
 
-        if has_audio and abs(speed - 1.0) > 1e-6:
+        speed_changed = abs(speed - 1.0) > 1e-6
+        if has_audio and speed_changed:
             filter_graph = (
                 f"[0:v]{video_filter}[v];"
                 f"[0:a:0]{_build_atempo_filter(speed)}[a]"
@@ -570,20 +575,26 @@ def _transcode_h264_try(
         else:
             cmd += ["-vf", video_filter, "-an"]
 
-        cmd += ["-c:v", encoder.name, *hwaccel.video_encode_args(encoder.name, bitrate_kbps)]
-        # QSV only: pin safe constant fps (avoids "frame rate unsupported" after setpts)
-        if encoder.name == "h264_qsv":
-            out_fps = hwaccel.snap_fps_for_encoder(encoder, source_fps or 30)
-            cmd += ["-r", str(out_fps)]
+        video_args = list(hwaccel.video_encode_args(encoder.name, bitrate_kbps))
+        if speed_changed:
+            # B-frames + bad VFR timestamps commonly freeze Unity / VRChat video.
+            video_args += ["-bf", "0"]
+
+        cmd += ["-c:v", encoder.name, *video_args]
+        # Pin CFR for speed change (all encoders). QSV also needs this at 1x.
+        if speed_changed or encoder.name == "h264_qsv":
+            cmd += ["-r", str(out_fps), "-fps_mode", "cfr"]
         if has_audio:
             cmd += ["-c:a", "aac", "-b:a", "192k"]
-        cmd += ["-movflags", "+faststart", dst]
+            if speed_changed:
+                cmd += ["-shortest"]
+        cmd += ["-avoid_negative_ts", "make_zero", "-movflags", "+faststart", dst]
 
         logger.info(
-            "transcode start: encoder=%s speed=%sx bitrate=%skbps fps_in=%.3f audio=%s src=%s",
-            encoder.name, speed, bitrate_kbps, source_fps or 0, has_audio, os.path.basename(src),
-        )
-        ok, err_tail = _run_ffmpeg_transcode(
+            "transcode start: encoder=%s speed=%sx bitrate=%skbps fps_in=%.3f fps_out=%s audio=%s src=%s",
+            encoder.name, speed, bitrate_kbps, source_fps or 0, out_fps,
+            has_audio, os.path.basename(src),
+        )        ok, err_tail = _run_ffmpeg_transcode(
             cmd,
             step=step,
             emit_msg=emit_msg,
