@@ -64,8 +64,28 @@ DEFAULT_TTL = effective_ttl(int(os.environ.get("DEFAULT_TTL", "604800")))  # 7 d
 DEFAULT_BITRATE_KBPS = int(os.environ.get("DEFAULT_BITRATE_KBPS", "3000"))
 MIN_BITRATE_KBPS = int(os.environ.get("MIN_BITRATE_KBPS", "500"))
 MAX_BITRATE_KBPS = int(os.environ.get("MAX_BITRATE_KBPS", "50000"))  # 0 = no cap
-# Extra headroom when re-encoding for speed (H.264 + HW encoders look softer than source).
-SPEED_BITRATE_FACTOR = float(os.environ.get("SPEED_BITRATE_FACTOR", "1.5"))
+# Mild ceiling bump when speeding (bitrate is only a maxrate cap; quality is CRF/CQ).
+SPEED_BITRATE_FACTOR = float(os.environ.get("SPEED_BITRATE_FACTOR", "1.0"))
+
+# Lower CRF/CQ/global_quality = higher visual quality (ffmpeg convention).
+ENCODE_QUALITY_PRESETS: dict[str, dict[str, int]] = {
+    "high": {"crf": 17, "cq": 17, "qsv": 18, "vt_q": 72},
+    "balanced": {"crf": 19, "cq": 19, "qsv": 20, "vt_q": 65},
+    "medium": {"crf": 22, "cq": 22, "qsv": 23, "vt_q": 55},
+    "small": {"crf": 24, "cq": 24, "qsv": 25, "vt_q": 45},
+}
+DEFAULT_ENCODE_QUALITY = os.environ.get("DEFAULT_ENCODE_QUALITY", "balanced").strip().lower()
+if DEFAULT_ENCODE_QUALITY not in ENCODE_QUALITY_PRESETS:
+    DEFAULT_ENCODE_QUALITY = "balanced"
+
+
+def normalize_encode_quality(quality) -> str:
+    key = str(quality or DEFAULT_ENCODE_QUALITY).strip().lower()
+    return key if key in ENCODE_QUALITY_PRESETS else DEFAULT_ENCODE_QUALITY
+
+
+def encode_quality_params(quality) -> dict[str, int]:
+    return dict(ENCODE_QUALITY_PRESETS[normalize_encode_quality(quality)])
 
 
 def clamp_bitrate_kbps(bitrate_kbps) -> int:
@@ -83,8 +103,8 @@ def clamp_bitrate_kbps(bitrate_kbps) -> int:
 
 def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
     """
-    Encode target when speeding: base × speed × SPEED_BITRATE_FACTOR.
-    Same timeline density as source, plus headroom for H.264 re-encode loss.
+    Bitrate ceiling when speeding: base × speed × SPEED_BITRATE_FACTOR.
+    Visual quality is controlled separately via encode_quality (CRF/CQ).
     """
     base = clamp_bitrate_kbps(bitrate_kbps)
     try:

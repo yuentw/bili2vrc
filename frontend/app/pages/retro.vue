@@ -305,7 +305,19 @@ function copyRetroUrl() {
                   </select>
                 </div>
                 <div class="field-col">
-                  <label class="xp-label" for="bitrateKbps">影片位元率（重新編碼時）:</label>
+                  <label class="xp-label" for="encodeQuality">編碼品質（重新編碼時）:</label>
+                  <select class="xp-select" id="encodeQuality" v-model="app.encodeQuality">
+                    <option
+                      v-for="option in app.encodeQualityOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field-col">
+                  <label class="xp-label" for="bitrateKbps">碼率上限（重新編碼時）:</label>
                   <select class="xp-select" id="bitrateKbps" v-model.number="app.bitrateKbps">
                     <option
                       v-if="app.bitrateSelectOptions.source"
@@ -321,12 +333,11 @@ function copyRetroUrl() {
                       {{ kbps }} kbps
                     </option>
                   </select>
-                  <div
-                    v-if="Number(app.playbackSpeed) !== 1"
-                    class="xp-hint"
-                  >
-                    倍速實際編碼：約 {{ app.effectiveBitrateKbps }} kbps
-                    （選取值 × {{ app.playbackSpeed }}x × 1.5 畫質補償）
+                  <div class="xp-hint">
+                    以品質為主；碼率只當上限。
+                    <template v-if="Number(app.playbackSpeed) !== 1">
+                      倍速上限約 {{ app.bitrateCeilingKbps }} kbps（選取值 × {{ app.playbackSpeed }}x）
+                    </template>
                   </div>
                 </div>
               </div>

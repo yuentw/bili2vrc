@@ -18,21 +18,26 @@ export function useBili2Vrc() {
   const playbackSpeed = ref(1)
   const bitrateKbps = ref(3000)
   const sourceBitrateKbps = ref<number | null>(null)
+  const encodeQuality = ref('balanced')
   const compatMode = ref(false)
   const bitratePresetOptions = [1500, 2000, 3000, 4000, 5000, 8000]
+  const encodeQualityOptions = [
+    { value: 'high', label: '高畫質（檔案較大）' },
+    { value: 'balanced', label: '標準' },
+    { value: 'medium', label: '較小檔案' },
+    { value: 'small', label: '最小檔案' },
+  ]
   const bitrateSelectOptions = computed(() => {
     const source = sourceBitrateKbps.value
     const presets = bitratePresetOptions.filter((kbps) => kbps !== source)
     return { source, presets }
   })
 
-  const effectiveBitrateKbps = computed(() => {
+  const bitrateCeilingKbps = computed(() => {
     const base = Number(bitrateKbps.value) || 3000
     const speed = Number(playbackSpeed.value) || 1
     if (Math.abs(speed - 1) < 1e-6) return Math.round(base)
-    // Keep in sync with config.SPEED_BITRATE_FACTOR (default 1.5)
-    const speedBitrateFactor = 1.5
-    return Math.max(500, Math.min(50000, Math.round(base * speed * speedBitrateFactor)))
+    return Math.max(500, Math.min(50000, Math.round(base * speed)))
   })
 
   const allFormats = ref<VideoFormat[]>([])
@@ -336,6 +341,7 @@ export function useBili2Vrc() {
             compat_mode: Boolean(compatMode.value),
             playback_speed: Number(playbackSpeed.value) || 1,
             bitrate_kbps: Number(bitrateKbps.value) || 3000,
+            encode_quality: encodeQuality.value || 'balanced',
           }),
         ),
       })
@@ -479,7 +485,9 @@ export function useBili2Vrc() {
     sourceBitrateKbps,
     bitratePresetOptions,
     bitrateSelectOptions,
-    effectiveBitrateKbps,
+    bitrateCeilingKbps,
+    encodeQuality,
+    encodeQualityOptions,
     compatMode,
     allFormats,
     filteredFormats,

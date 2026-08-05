@@ -82,42 +82,51 @@ QSV_INIT_CANDIDATES: list[list[str]] = [
 ]
 
 
-def video_encode_args(encoder_name: str, bitrate_kbps: int) -> list[str]:
-    """ffmpeg -c:v args: quality-oriented with bitrate as target / ceiling."""
+def video_encode_args(
+    encoder_name: str,
+    bitrate_kbps: int,
+    encode_quality: str | None = None,
+) -> list[str]:
+    """
+    Quality-first H.264 args (CRF/CQ/global_quality).
+    bitrate_kbps is only a maxrate ceiling so files stay bounded.
+    """
+    quality = config.encode_quality_params(encode_quality)
     kbps = max(1, int(bitrate_kbps))
-    bitrate = f"{kbps}k"
-    # Allow short peaks above average (helps sharp detail after speed re-encode).
     maxrate = f"{max(kbps, int(kbps * 1.5))}k"
     bufsize = f"{kbps * 2}k"
     profile = ["-profile:v", "main"]
+    crf = str(quality["crf"])
+    cq = str(quality["cq"])
+    qsv_q = str(quality["qsv"])
+    vt_q = str(quality["vt_q"])
 
     if encoder_name == "libx264":
         return [
-            "-preset", "fast", *profile, "-level:v", "4.1",
-            "-crf", "18",
+            "-preset", "medium", *profile, "-level:v", "4.1",
+            "-crf", crf,
             "-maxrate", maxrate, "-bufsize", bufsize,
         ]
     if encoder_name == "h264_nvenc":
         return [
-            "-preset", "p5", "-rc", "vbr", "-cq", "19", *profile,
-            "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+            "-preset", "p5", "-rc", "vbr", "-cq", cq, *profile,
+            "-b:v", "0", "-maxrate", maxrate, "-bufsize", bufsize,
         ]
     if encoder_name == "h264_videotoolbox":
-        return [*profile, "-b:v", bitrate, "-maxrate", maxrate]
+        return [*profile, "-q:v", vt_q, "-maxrate", maxrate]
     if encoder_name == "h264_vaapi":
-        return [*profile, "-b:v", bitrate, "-maxrate", maxrate]
+        return [*profile, "-qp", cq, "-maxrate", maxrate]
     if encoder_name == "h264_qsv":
-        # Lower global_quality = higher quality (ICQ-style).
         return [
             *profile, "-look_ahead", "1",
-            "-global_quality", "20",
-            "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+            "-global_quality", qsv_q,
+            "-maxrate", maxrate, "-bufsize", bufsize,
         ]
     if encoder_name == "h264_amf":
-        return ["-quality", "quality", *profile, "-b:v", bitrate, "-maxrate", maxrate]
+        return ["-quality", "quality", *profile, "-qp_i", cq, "-qp_p", cq, "-maxrate", maxrate]
     return [
-        "-preset", "fast", *profile,
-        "-crf", "18", "-maxrate", maxrate, "-bufsize", bufsize,
+        "-preset", "medium", *profile,
+        "-crf", crf, "-maxrate", maxrate, "-bufsize", bufsize,
     ]
 
 
@@ -275,7 +284,11 @@ def _smoke_test_encoder(encoder: VideoEncoder) -> tuple[bool, str]:
         "-i", "testsrc2=duration=0.2:size=640x360:rate=30",
         "-vf", compose_video_filter(1.0, encoder),
         "-c:v", encoder.name,
-        *video_encode_args(encoder.name, config.DEFAULT_BITRATE_KBPS),
+        *video_encode_args(
+            encoder.name,
+            config.DEFAULT_BITRATE_KBPS,
+            config.DEFAULT_ENCODE_QUALITY,
+        ),
         "-frames:v", "3",
         "-f", "null",
         "-",
