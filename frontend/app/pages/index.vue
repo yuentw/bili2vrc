@@ -253,13 +253,27 @@ function onResultVideoLoad() {
             <div class="field">
               <label>影片位元率（重新編碼時）</label>
               <select v-model.number="app.bitrateKbps">
-                <option :value="1500">1500 kbps</option>
-                <option :value="2000">2000 kbps</option>
-                <option :value="3000">3000 kbps</option>
-                <option :value="4000">4000 kbps</option>
-                <option :value="5000">5000 kbps</option>
-                <option :value="8000">8000 kbps</option>
+                <option
+                  v-if="app.bitrateSelectOptions.source"
+                  :value="app.bitrateSelectOptions.source"
+                >
+                  原始（{{ app.bitrateSelectOptions.source }} kbps）
+                </option>
+                <option
+                  v-for="kbps in app.bitrateSelectOptions.presets"
+                  :key="kbps"
+                  :value="kbps"
+                >
+                  {{ kbps }} kbps
+                </option>
               </select>
+              <div
+                v-if="Number(app.playbackSpeed) !== 1"
+                class="field-hint"
+              >
+                倍速實際編碼：{{ app.effectiveBitrateKbps }} kbps
+                （選取值 × {{ app.playbackSpeed }}x）
+              </div>
             </div>
             <div class="field field-full">
               <label class="compat-check">

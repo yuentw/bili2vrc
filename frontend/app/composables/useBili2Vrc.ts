@@ -17,7 +17,21 @@ export function useBili2Vrc() {
   const ttl = ref(604800)
   const playbackSpeed = ref(1)
   const bitrateKbps = ref(3000)
+  const sourceBitrateKbps = ref<number | null>(null)
   const compatMode = ref(false)
+  const bitratePresetOptions = [1500, 2000, 3000, 4000, 5000, 8000]
+  const bitrateSelectOptions = computed(() => {
+    const source = sourceBitrateKbps.value
+    const presets = bitratePresetOptions.filter((kbps) => kbps !== source)
+    return { source, presets }
+  })
+
+  const effectiveBitrateKbps = computed(() => {
+    const base = Number(bitrateKbps.value) || 3000
+    const speed = Number(playbackSpeed.value) || 1
+    if (Math.abs(speed - 1) < 1e-6) return Math.round(base)
+    return Math.max(500, Math.min(50000, Math.round(base * speed)))
+  })
 
   const allFormats = ref<VideoFormat[]>([])
   const filteredFormats = ref<VideoFormat[]>([])
@@ -104,11 +118,24 @@ export function useBili2Vrc() {
     selectedIdx.value = -1
     codecFamilies.value = []
     codecFamily.value = 'h264'
+    sourceBitrateKbps.value = null
+    bitrateKbps.value = 3000
     fmtTableMessage.value = message
     fmtTableError.value = isError
     fmtCountShown.value = 0
     fmtCountTotal.value = 0
     selInfoText.value = '尚未選擇格式'
+  }
+
+  function applySourceBitrate(format: VideoFormat) {
+    const raw = Number(format.bitrate_kbps)
+    if (!Number.isFinite(raw) || raw < 1) {
+      sourceBitrateKbps.value = null
+      return
+    }
+    const kbps = Math.max(500, Math.min(50000, Math.round(raw)))
+    sourceBitrateKbps.value = kbps
+    bitrateKbps.value = kbps
   }
 
   function applyVideoMeta(data: VideoMeta & { formats?: VideoFormat[] }) {
@@ -161,9 +188,11 @@ export function useBili2Vrc() {
     if (!format) return
     selectedIdx.value = index
     selectedFormat.value = format
+    applySourceBitrate(format)
     const fps = format.fps ? `${format.fps.toFixed(3)} fps` : ''
-    selInfoText.value = `已選擇: ${format.resolution}  ${format.codec}  ${fps}`
-    statusBarMsg.value = `已選取格式：${format.resolution} ${format.codec} ${fps}`
+    const bitrate = sourceBitrateKbps.value ? `  ${sourceBitrateKbps.value} kbps` : ''
+    selInfoText.value = `已選擇: ${format.resolution}  ${format.codec}  ${fps}${bitrate}`
+    statusBarMsg.value = `已選取格式：${format.resolution} ${format.codec} ${fps}${bitrate}`
   }
 
   async function fetchFormats(retro = false) {
@@ -445,6 +474,10 @@ export function useBili2Vrc() {
     ttl,
     playbackSpeed,
     bitrateKbps,
+    sourceBitrateKbps,
+    bitratePresetOptions,
+    bitrateSelectOptions,
+    effectiveBitrateKbps,
     compatMode,
     allFormats,
     filteredFormats,

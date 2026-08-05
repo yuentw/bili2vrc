@@ -6,6 +6,7 @@ export interface VideoFormat {
   dynamic_range?: string
   size: string
   size_approx?: boolean
+  bitrate_kbps?: number | null
 }
 
 export interface VideoMeta {

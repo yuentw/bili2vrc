@@ -77,6 +77,21 @@ def clamp_bitrate_kbps(bitrate_kbps) -> int:
     if MAX_BITRATE_KBPS > 0 and bitrate > MAX_BITRATE_KBPS:
         return MAX_BITRATE_KBPS
     return bitrate
+
+
+def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
+    """
+    Encode target: base bitrate × playback speed when speeding up/down.
+    Keeps similar quality per second of output timeline after setpts.
+    """
+    base = clamp_bitrate_kbps(bitrate_kbps)
+    try:
+        speed = float(playback_speed)
+    except (TypeError, ValueError):
+        speed = 1.0
+    if abs(speed - 1.0) <= 1e-6:
+        return base
+    return clamp_bitrate_kbps(int(round(base * speed)))
 HOST         = os.environ.get("HOST", "0.0.0.0")             # bind address / 綁定位址
 PORT         = int(os.environ.get("PORT", "5000"))             # HTTP port / HTTP 連接埠
 HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")           # auto | libx264 | h264_videotoolbox, etc.

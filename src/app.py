@@ -495,9 +495,15 @@ def transcode_h264(
     硬體編碼失敗時自動回退 libx264。
     """
     speed = clamp_playback_speed(float(playback_speed))
-    video_bitrate = config.clamp_bitrate_kbps(
+    base_bitrate = config.clamp_bitrate_kbps(
         bitrate_kbps if bitrate_kbps is not None else config.DEFAULT_BITRATE_KBPS,
     )
+    video_bitrate = config.effective_bitrate_kbps(base_bitrate, speed)
+    if video_bitrate != base_bitrate:
+        logger.info(
+            "bitrate scaled for speed: base=%skbps × %sx → %skbps",
+            base_bitrate, speed, video_bitrate,
+        )
     has_audio = _probe_has_audio(src)
     source_fps = hwaccel.probe_video_fps(src)
     step = "stretch" if abs(speed - 1.0) > 1e-6 else "reencode"
@@ -738,6 +744,15 @@ def fetch_formats():
         size = f.get("filesize") or f.get("filesize_approx")
         approx = f.get("filesize") is None  # 如果只有 approx 就加 ~
 
+        # Prefer video bitrate; fall back to total bitrate (kbps from yt-dlp).
+        raw_bitrate = f.get("vbr") or f.get("tbr") or 0
+        try:
+            bitrate_kbps = int(round(float(raw_bitrate)))
+        except (TypeError, ValueError):
+            bitrate_kbps = 0
+        if bitrate_kbps < 1:
+            bitrate_kbps = None
+
         video_formats.append({
             "format_id":  f.get("format_id", ""),
             "resolution": f"{width}x{height}" if width else f"{height}p",
@@ -749,6 +764,7 @@ def fetch_formats():
             "size":       format_size(size),
             "size_bytes": size or 0,
             "size_approx": approx,
+            "bitrate_kbps": bitrate_kbps,
             "acodec":     f.get("acodec", "none"),
             "ext":        f.get("ext", "mp4"),
         })

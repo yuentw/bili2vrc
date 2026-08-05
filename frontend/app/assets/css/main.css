@@ -334,6 +334,12 @@
       text-transform: uppercase;
       margin-bottom: 10px;
     }
+    .field-hint {
+      margin-top: 8px;
+      font-size: var(--fs-sm);
+      color: var(--muted);
+      line-height: 1.4;
+    }
     .field input:not([type="checkbox"]),
     .field select {
       width: 100%;
