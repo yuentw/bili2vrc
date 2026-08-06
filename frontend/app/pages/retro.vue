@@ -8,13 +8,20 @@ import {
 
 useHead({
   title: 'bili2vrchat POS — B站→VRChat',
+  meta: [
+    { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
+    { 'http-equiv': 'Permissions-Policy', content: 'clipboard-read=(self), clipboard-write=(self)' },
+  ],
 })
 
 const app = reactive(useBili2Vrc())
 const cookieFileInput = ref<HTMLInputElement | null>(null)
 const previewVideo = ref<HTMLVideoElement | null>(null)
+const urlInputEl = ref<HTMLInputElement | null>(null)
 const hideCookieWarning = ref(false)
 const clockText = ref('')
+const pasteWaiting = ref(false)
+let pasteWaitCleanup: (() => void) | null = null
 
 let clockTimer: ReturnType<typeof setInterval> | null = null
 
@@ -41,8 +48,10 @@ onMounted(() => {
   }
 })
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
   if (clockTimer) clearInterval(clockTimer)
+  pasteWaitCleanup?.()
+  pasteWaitCleanup = null
 })
 
 function onCookieFileChange(event: Event) {
@@ -56,6 +65,73 @@ function onCookieFileChange(event: Event) {
 
 function onUrlKeydown(event: KeyboardEvent) {
   if (event.key === 'Enter') app.fetchFormats(true)
+}
+
+async function requestClipboardReadPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> {
+  if (!window.isSecureContext || !navigator.permissions?.query) return 'unknown'
+  try {
+    const status = await navigator.permissions.query({
+      name: 'clipboard-read' as PermissionName,
+    })
+    return status.state as 'granted' | 'denied' | 'prompt'
+  } catch {
+    return 'unknown'
+  }
+}
+
+function waitForManualPaste(): Promise<string | null> {
+  pasteWaitCleanup?.()
+  pasteWaiting.value = true
+  urlInputEl.value?.focus()
+  urlInputEl.value?.select()
+
+  return new Promise((resolve) => {
+    const finish = (value: string | null) => {
+      window.clearTimeout(timer)
+      window.removeEventListener('paste', onPaste, true)
+      window.removeEventListener('keydown', onKey, true)
+      pasteWaiting.value = false
+      pasteWaitCleanup = null
+      resolve(value)
+    }
+    const onPaste = (event: ClipboardEvent) => {
+      const text = event.clipboardData?.getData('text')?.trim() || ''
+      if (!text) return
+      event.preventDefault()
+      finish(text)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') finish(null)
+    }
+    const timer = window.setTimeout(() => finish(null), 15000)
+    pasteWaitCleanup = () => finish(null)
+    window.addEventListener('paste', onPaste, true)
+    window.addEventListener('keydown', onKey, true)
+  })
+}
+
+async function pasteAndFetch() {
+  if (app.fetchLoading || pasteWaiting.value) return
+
+  let text = ''
+  if (window.isSecureContext && navigator.clipboard?.readText) {
+    const permission = await requestClipboardReadPermission()
+    if (permission !== 'denied') {
+      try {
+        text = (await navigator.clipboard.readText()).trim()
+      } catch {
+        /* fall through to Ctrl+V */
+      }
+    }
+  }
+
+  if (!text) {
+    text = (await waitForManualPaste()) || ''
+    if (!text) return
+  }
+
+  app.onUrlInput(text)
+  await app.fetchFormats(true)
 }
 
 function onPreviewSpeedInput(event: Event) {
@@ -116,6 +192,7 @@ const catColorClass = computed(() => {
                 <div class="pos-url-row">
                   <input
                     id="posUrl"
+                    ref="urlInputEl"
                     class="pos-input"
                     type="text"
                     v-model="app.urlInput"
@@ -125,6 +202,14 @@ const catColorClass = computed(() => {
                     @input="app.onUrlInput(app.urlInput)"
                     @keydown="onUrlKeydown"
                   >
+                  <button
+                    type="button"
+                    class="pos-btn pos-btn-magenta pos-paste-btn"
+                    :disabled="app.fetchLoading || pasteWaiting"
+                    @click="pasteAndFetch"
+                  >
+                    {{ pasteWaiting ? 'Ctrl+V…' : '貼上並解析' }}
+                  </button>
                 </div>
               </section>
 
@@ -527,7 +612,7 @@ const catColorClass = computed(() => {
   --pos-panel: #dccdb4;
   color: var(--pos-ink);
   font-family: Tahoma, Verdana, "MS Sans Serif", Arial, sans-serif;
-  font-size: 12px;
+  font-size: 15px;
   background: #2a2218;
   min-height: 100vh;
   padding: 8px;
@@ -555,8 +640,9 @@ const catColorClass = computed(() => {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 10px;
+  padding: 10px 12px;
   border-bottom: 2px solid #4a0808;
+  font-size: 15px;
 }
 
 .retro-app .pos-brand,
@@ -584,9 +670,9 @@ const catColorClass = computed(() => {
 }
 
 .retro-app .pos-col-left {
-  flex: 0 0 30% !important;
-  max-width: 360px;
-  min-width: 240px;
+  flex: 0 0 34% !important;
+  max-width: 420px;
+  min-width: 280px;
 }
 
 .retro-app .pos-col-center {
@@ -595,25 +681,25 @@ const catColorClass = computed(() => {
 }
 
 .retro-app .pos-col-right {
-  flex: 0 0 168px !important;
-  min-width: 140px;
+  flex: 0 0 200px !important;
+  min-width: 180px;
   border-right: none !important;
 }
 
 .retro-app .pos-col-head {
   background: #b8a888 !important;
   border-bottom: 2px solid var(--pos-border) !important;
-  padding: 5px 8px;
+  padding: 10px 12px;
   font-weight: bold;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--pos-ink);
 }
 
 .retro-app .pos-col-body {
-  padding: 8px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .retro-app .pos-section {
@@ -626,9 +712,9 @@ const catColorClass = computed(() => {
 .retro-app .pos-section-title {
   background: #c4b090 !important;
   border-bottom: 1px solid var(--pos-border);
-  padding: 3px 8px;
+  padding: 8px 10px;
   font-weight: bold;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--pos-ink);
 }
 
@@ -644,7 +730,24 @@ const catColorClass = computed(() => {
 .retro-app .pos-section > .pos-progress,
 .retro-app .pos-section > .pos-status-box,
 .retro-app .pos-section > .pos-result {
-  margin: 6px;
+  margin: 8px;
+}
+
+.retro-app .pos-url-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.retro-app .pos-url-row .pos-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.retro-app .pos-paste-btn {
+  flex: 0 0 auto;
+  min-width: 120px;
+  white-space: nowrap;
 }
 
 .retro-app .pos-btn {
@@ -654,9 +757,10 @@ const catColorClass = computed(() => {
   border-color: var(--pos-bevel-light) var(--pos-bevel-dark) var(--pos-bevel-dark) var(--pos-bevel-light) !important;
   color: var(--pos-ink);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: bold;
-  padding: 8px 10px;
+  padding: 12px 14px;
+  min-height: 48px;
   cursor: pointer;
   border-radius: 0 !important;
 }
@@ -671,7 +775,11 @@ const catColorClass = computed(() => {
 }
 
 .retro-app .pos-btn-block { width: 100%; }
-.retro-app .pos-btn-tiny { font-size: 10px; padding: 2px 6px; }
+.retro-app .pos-btn-tiny {
+  font-size: 13px;
+  padding: 8px 12px;
+  min-height: 40px;
+}
 .retro-app .pos-btn-blue { color: var(--pos-blue) !important; }
 .retro-app .pos-btn-red { color: var(--pos-red) !important; }
 .retro-app .pos-btn-green { color: var(--pos-green) !important; }
@@ -688,8 +796,9 @@ const catColorClass = computed(() => {
 .retro-app .pos-select {
   width: 100%;
   font-family: inherit;
-  font-size: 11px;
-  padding: 4px;
+  font-size: 15px;
+  padding: 10px 12px;
+  min-height: 48px;
   border: 2px solid !important;
   border-color: var(--pos-bevel-dark) var(--pos-bevel-light) var(--pos-bevel-light) var(--pos-bevel-dark) !important;
   background: #fffef8 !important;
@@ -699,15 +808,15 @@ const catColorClass = computed(() => {
 
 .retro-app .pos-label {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: bold;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .retro-app .pos-hint {
-  font-size: 10px;
+  font-size: 13px;
   color: #5a4a30;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .retro-app .pos-hint-warn {
@@ -724,9 +833,9 @@ const catColorClass = computed(() => {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 6px;
+  padding: 10px 8px;
   border-bottom: 1px dotted #a89878;
-  font-size: 11px;
+  font-size: 14px;
   color: var(--pos-blue);
 }
 
@@ -746,9 +855,9 @@ const catColorClass = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  padding: 2px 0;
+  gap: 8px;
+  font-size: 14px;
+  padding: 6px 0;
 }
 
 .retro-app .pos-cookie-row.ok { color: var(--pos-green); }
@@ -756,49 +865,62 @@ const catColorClass = computed(() => {
 
 .retro-app .pos-items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
-  gap: 6px;
-  padding: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  padding: 10px;
 }
 
 .retro-app .pos-item {
   position: relative;
-  min-height: 78px;
+  min-height: 96px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px 6px 18px;
+  padding: 12px 8px 22px;
   color: var(--pos-blue) !important;
+  font-size: 15px;
+}
+
+.retro-app .pos-item-name {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.retro-app .pos-item-sub {
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 .retro-app .pos-item-price {
   position: absolute;
-  right: 4px;
-  bottom: 3px;
-  font-size: 10px;
+  right: 6px;
+  bottom: 4px;
+  font-size: 13px;
   color: var(--pos-ink);
 }
 
 .retro-app .pos-empty {
   grid-column: 1 / -1;
-  padding: 24px 12px;
+  padding: 32px 14px;
   text-align: center;
   border: 2px dashed var(--pos-border);
   background: #efe4ce;
   color: #5a4a30;
+  font-size: 15px;
 }
 
 .retro-app .pos-cats {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .retro-app .pos-cat {
-  min-height: 44px;
+  min-height: 56px;
   width: 100%;
+  font-size: 15px;
 }
 
 .retro-app .pos-cat-section {
@@ -817,22 +939,37 @@ const catColorClass = computed(() => {
 .retro-app .pos-footer {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  padding: 8px;
+  gap: 10px;
+  padding: 12px;
   background: #c8b898 !important;
   border-top: 2px solid var(--pos-bevel-light);
 }
 
 .retro-app .pos-footer .pos-btn {
-  min-height: 48px;
-  font-size: 14px;
+  min-height: 64px;
+  font-size: 18px;
 }
 
 .retro-app .pos-footer-note {
   grid-column: 1 / -1;
   text-align: center;
-  font-size: 10px;
+  font-size: 13px;
   color: #5a4a30;
+}
+
+.retro-app .pos-check-label {
+  font-size: 15px;
+  min-height: 44px;
+  gap: 10px;
+}
+
+.retro-app .pos-check-label input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+}
+
+.retro-app .crf-slider {
+  min-height: 36px;
 }
 
 .retro-app .page-footer {
