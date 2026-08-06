@@ -13,13 +13,15 @@ Browser → FastAPI (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
 ## Features
 
 - Download from **Bilibili** and **YouTube** (yt-dlp)
-- **Playback speed** (permanent change before upload; re-encodes when ≠ 1.0x)
-- **VRChat compat mode** (force H.264 re-encode; fixes some tear issues)
+- **Output modes**: **Keep original** / **AV1** (default) / **H.264** (VRChat-oriented re-encode)
+- **Playback speed** (permanent change before upload; ≠ 1.0x forces re-encode; cannot keep original)
+- **HDR → SDR** (when the selected format is HDR / HDR10 / HLG): optional tonemap before encode
+- **Tonemap mapping** (advanced): **Mobius** (default) / **BT.2390** / **Hable** via ffmpeg `libplacebo` (Vulkan GPU; not NVENC)
 - **Encode modes**: **VBR** (quality + bitrate ceiling) / **CBR** (fixed bitrate)
-- **Quality presets**: high / balanced / medium / small
+- **CRF / CQ** slider per output codec; quality presets for encoder tuning
 - **Bitrate**: “original” or custom presets; only “original” auto-scales bitrate with speed
-- Auto hardware encode (NVENC / QSV / AMF / VideoToolbox, etc.) with libx264 fallback
-- Post-download **ffprobe integrity check** (readable streams, duration > 0); at 1.0x without compat mode only **faststart** (no re-encode)
+- Auto hardware encode (NVENC AV1/H.264, QSV, AMF, VideoToolbox, …) with software fallback (`libsvtav1` / `libx264`)
+- Post-download **ffprobe integrity check**; **Keep original** at 1.0x without HDR→SDR uses **faststart** only (`-c copy`)
 - Upload to **your R2 bucket**; result preview uses the **R2 public URL** (not local streaming)
 - **TTL** in the UI (1 h / 1 d / 7 d / 30 d / forever) with background expiry cleanup
 - Cookies stored in **browser localStorage** only
@@ -33,7 +35,7 @@ Browser → FastAPI (yt-dlp / ffmpeg) → R2 (S3 API) → VRChat direct URL
 |------|----------|--------|
 | Python 3.14+ | Yes | See `.python-version` / `pyproject.toml` |
 | [uv](https://docs.astral.sh/uv/) | Yes | Python deps + `uv run app.py`; start scripts can install into `.uv` |
-| [ffmpeg](https://ffmpeg.org/) | Yes | `ffmpeg` and `ffprobe` on `PATH` |
+| [ffmpeg](https://ffmpeg.org/) | Yes | `ffmpeg` and `ffprobe` on `PATH`. For **HDR→SDR**, build should include **libplacebo** + **Vulkan** |
 | [Node.js](https://nodejs.org/) | Yes for YouTube | yt-dlp (`--js-runtimes node`) |
 | [Bun](https://bun.sh/) | Yes (frontend build) | Start scripts can install into `.bun` and build the frontend |
 | Cloudflare R2 bucket | Yes | see [R2 setup](#cloudflare-r2-setup) below |
@@ -287,17 +289,20 @@ Deep link format: `http://localhost:5000/?url=<encoded bilibili video URL>`
 
 1. **Paste URL** — Bilibili or YouTube link → **Fetch formats** (modern UI also has **Paste**, which reads the clipboard then fetches)
 2. **Cookies (if needed)** — age-restricted / member videos: export `cookies.txt` and upload in the UI (stored in browser only). See [cookies/README.md](cookies/README.md)
-3. **Pick a format** — choose resolution / codec (fills “original” bitrate)
+3. **Pick a format** — choose resolution / codec / dynamic range (fills “original” bitrate). HDR rows show `HDR` / `HDR10` / `HLG`
 4. **Upload options**
    - **Custom path** — optional object key; empty = random `f_xxxxxx`
    - **Retention** — 1 h / 1 d / 7 d / 30 d / forever (auto-delete when not forever)
-   - **Playback speed** — permanent change before upload; ≠ 1.0x re-encodes (CFR, pitch preserved)
-   - **Encode mode** — VBR (quality + ceiling) or CBR (fixed bitrate)
-   - **Encode quality** — high / balanced / medium / small
-   - **Bitrate** — “original” or custom presets  
-     - CBR custom: `2000 / 4000 / 5000 / 6000 / 8000 / 10000` kbps  
-     - Only “original” auto-scales bitrate with speed; custom CBR / VBR do **not**
-   - **VRChat compat mode** — re-encode to H.264 (fixes some sync/tear issues; slower)
+   - **Playback speed** — permanent change before upload; ≠ 1.0x re-encodes (CFR, pitch preserved) and disables **Keep original**
+   - **Output mode** — **Keep original** (faststart only) / **AV1** (default re-encode) / **H.264** (VRChat-oriented Main Profile)
+   - **HDR → SDR** — shown only when the selected format is HDR; downloads that stream then tonemaps to SDR (forces re-encode)
+   - **Advanced encoding**
+     - **Encode mode** — VBR (quality + ceiling) or CBR (fixed bitrate)
+     - **CRF / CQ** — codec-specific quality slider
+     - **Mapping (HDR→SDR)** — Mobius (default) / BT.2390 / Hable (`libplacebo`; enabled when HDR→SDR is on)
+     - **Bitrate** — “original” or custom presets  
+       - CBR custom: `2000 / 4000 / 5000 / 6000 / 8000 / 10000` kbps  
+       - Only “original” auto-scales bitrate with speed; custom CBR / VBR do **not**
 5. **Start** — download → verify → transcode (if needed) → upload to R2 → preview via R2 URL
 6. **Copy URL** — paste into VRChat when upload completes
 
@@ -305,9 +310,10 @@ Deep link format: `http://localhost:5000/?url=<encoded bilibili video URL>`
 
 | Condition | Behavior |
 |-----------|----------|
-| 1.0x speed and compat mode off | **faststart** only (`-c copy`), no re-encode |
-| VRChat compat mode on | H.264 re-encode |
-| Playback speed ≠ 1.0x | Time stretch + H.264 re-encode |
+| **Keep original**, 1.0x, HDR→SDR off | **faststart** only (`-c copy`) |
+| **AV1** (default) or **H.264** | Re-encode to that codec (HW when available) |
+| Playback speed ≠ 1.0x | Time stretch + re-encode (cannot keep original) |
+| **HDR → SDR** on | Tonemap (`libplacebo`) + re-encode |
 
 Example result: `https://pub-xxxx.r2.dev/f_abc123`
 
@@ -343,10 +349,11 @@ A **background thread** in this app scans the bucket every `R2_CLEANUP_INTERVAL`
 | `SPEED_BITRATE_FACTOR` | `1.0` | Extra factor when “original” bitrate is scaled by speed |
 | `DEFAULT_ENCODE_MODE` | `vbr` | `vbr` or `cbr` |
 | `DEFAULT_ENCODE_QUALITY` | `balanced` | `high` / `balanced` / `medium` / `small` |
+| `DEFAULT_OUTPUT_CODEC` | `av1` | `av1` / `h264` / `h265` (API default when not “keep original”) |
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `5000` | HTTP port |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt static output directory |
-| `HW_ENCODER` | `auto` | `auto`, `libx264`, `h264_qsv`, `h264_nvenc`, etc. |
+| `HW_ENCODER` | `auto` | `auto`, `av1_nvenc`, `libsvtav1`, `h264_nvenc`, `libx264`, `h264_qsv`, … |
 | `DISABLE_HW_ACCEL` | off | `1` / `true` to force software encode/decode only |
 | `LOG_LEVEL` | `INFO` | Python log level |
 | `DISABLE_ARIA2C` | off | `1` / `true` to disable aria2c |
@@ -395,9 +402,10 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | YouTube fetch fails | Install Node.js; run `node -version` |
 | `uv` / `bun` not found | Run `start.bat` / `start.sh` (installs into `.uv` / `.bun`), or install manually |
 | Frontend missing / blank UI | Run `cd frontend && bun install && bun run generate` |
-| Bilibili slow | Add `aria2c.exe` to project root (Windows) or install aria2 to `PATH`. When fetching formats, choosing a non-H.264 codec (e.g. AV1 / H.265 / VP9) can also speed up downloads |
+| Bilibili slow | Add `aria2c.exe` to project root (Windows) or install aria2 to `PATH`. When fetching formats, choosing a non-H.264 source codec (e.g. AV1 / H.265 / VP9) can also speed up downloads |
 | Expired files still in bucket | App must be running for cleanup; or wait until next scan interval |
-| VRChat won’t play / can’t seek | Enable **VRChat compat mode**; ensure `R2_PUBLIC_BASE_URL` is set |
-| File balloons after speed change | Use **CBR** or a lower VBR ceiling / quality; prefer custom bitrate presets |
+| VRChat won’t play / can’t seek | Use output mode **H.264**; ensure `R2_PUBLIC_BASE_URL` is set |
+| File balloons after speed change | Use **CBR** or a lower VBR ceiling / CRF; prefer custom bitrate presets |
 | Paste can’t read clipboard | Use `http://127.0.0.1:5000` or HTTPS; on LAN HTTP use Ctrl+V fallback or paste manually |
-| Does 1.0x re-encode? | No (unless compat mode is on); download still gets integrity check + faststart |
+| HDR looks washed / crushed | Enable **HDR → SDR** on an HDR format; try another **Mapping** (Mobius / BT.2390 / Hable). Needs ffmpeg with **libplacebo** + Vulkan |
+| Does 1.0x re-encode? | Only with **Keep original** and HDR→SDR off: no (faststart + verify). **AV1** / **H.264** / speed change / HDR→SDR always re-encode |

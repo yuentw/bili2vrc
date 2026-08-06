@@ -13,13 +13,15 @@
 ## 功能
 
 - 支援 **Bilibili**、**YouTube** 下載（yt-dlp）
-- **播放速度**（上傳前永久變更；≠ 1.0x 會重編碼）
-- **VRChat 相容模式**（強制 H.264 重編碼，修復部分撕裂）
+- **輸出模式**：**保留原始**／**AV1**（預設）／**H.264**（偏 VRChat 相容重編碼）
+- **播放速度**（上傳前永久變更；≠ 1.0x 會強制重編碼，無法保留原始）
+- **HDR → SDR**（所選格式為 HDR／HDR10／HLG 時）：可選 tonemap 後再編碼
+- **Mapping**（進階）：**Mobius**（預設）／**BT.2390**／**Hable**，經 ffmpeg `libplacebo`（Vulkan GPU；非 NVENC）
 - **編碼模式**：**VBR**（品質 + 碼率上限）／**CBR**（固定碼率）
-- **編碼品質**預設：高畫質／標準／較小／最小
+- **CRF／CQ** 依輸出編碼調整；另有編碼器品質預設
 - **碼率**：可選「原始」或自訂預設；僅「原始」會在倍速時自動 × 倍速調整碼率
-- 硬體編碼自動偵測（NVENC／QSV／AMF／VideoToolbox 等），失敗回退 libx264
-- 下載後 **ffprobe 完整性驗證**（可讀串流、時長 > 0）；原速且未開相容模式僅做 **faststart**（不重編碼）
+- 硬體編碼自動偵測（NVENC AV1／H.264、QSV、AMF、VideoToolbox 等），失敗回退軟體（`libsvtav1`／`libx264`）
+- 下載後 **ffprobe 完整性驗證**；**保留原始**＋原速＋未開 HDR→SDR 時僅做 **faststart**（`-c copy`）
 - 上傳至**你的 R2 bucket**；完成後以 **R2 公開網址**預覽（不經本機串流）
 - UI 可選**保存時間**（1 小時／1 天／7 天／30 天／永久），背景自動清理過期檔案
 - Cookie 僅存於**瀏覽器 localStorage**
@@ -33,7 +35,7 @@
 |------|----------|------|
 | Python 3.14+ | 是 | 見 `.python-version`、`pyproject.toml` |
 | [uv](https://docs.astral.sh/uv/) | 是 | Python 依賴與 `uv run app.py`；啟動腳本可裝到專案 `.uv` |
-| [ffmpeg](https://ffmpeg.org/) | 是 | `ffmpeg`、`ffprobe` 需在 `PATH` |
+| [ffmpeg](https://ffmpeg.org/) | 是 | `ffmpeg`、`ffprobe` 需在 `PATH`。**HDR→SDR** 需建置含 **libplacebo** + **Vulkan** |
 | [Node.js](https://nodejs.org/) | YouTube 必需 | 供 yt-dlp 使用（`--js-runtimes node`） |
 | [Bun](https://bun.sh/) | 是（前端建置） | 啟動腳本可裝到專案 `.bun` 並建置前端 |
 | Cloudflare R2 儲存桶 | 是 | 見下方 [R2 設定教學](#cloudflare-r2-設定教學) |
@@ -287,17 +289,20 @@ docker run --rm -p 5000:5000 \
 
 1. **貼上網址** — Bilibili 或 YouTube 連結 → 點 **獲取格式**（現代版亦可點 **貼上**，讀取剪貼簿後自動獲取）
 2. **Cookie（若需要）** — 會員／年齡限制影片：匯出 `cookies.txt` 並在頁面上傳（僅存瀏覽器）。詳見 [cookies/README.md](cookies/README.md)
-3. **選擇格式** — 在表格中選解析度／編碼（會帶入「原始」碼率）
+3. **選擇格式** — 在表格中選解析度／編碼／動態範圍（會帶入「原始」碼率）。HDR 列會顯示 `HDR`／`HDR10`／`HLG`
 4. **上傳選項**
    - **自訂路徑** — 可選 object key；留空則隨機 `f_xxxxxx`
    - **保存時間** — 1 小時／1 天／7 天／30 天／永久（非永久會自動刪除）
-   - **播放速度** — 上傳前永久變更；≠ 1.0x 會重編碼（CFR + 保留音高）
-   - **編碼模式** — VBR（品質 + 上限）或 CBR（固定碼率）
-   - **編碼品質** — 高畫質／標準／較小／最小
-   - **碼率** — 「原始」或自訂預設  
-     - CBR 自訂：`2000 / 4000 / 5000 / 6000 / 8000 / 10000` kbps  
-     - 僅選「原始」時，倍速會自動 × 倍速調整碼率；自訂 CBR／VBR **不**隨倍速相乘
-   - **VRChat 相容模式** — 重編碼為 H.264（修復部分撕裂問題，較慢）
+   - **播放速度** — 上傳前永久變更；≠ 1.0x 會重編碼（CFR + 保留音高），並禁用**保留原始**
+   - **輸出模式** — **保留原始**（僅 faststart）／**AV1**（預設重編碼）／**H.264**（偏 VRChat Main Profile）
+   - **HDR → SDR** — 僅在所選格式為 HDR 時顯示；下載該串流後 tonemap 為 SDR（強制重編碼）
+   - **進階編碼**
+     - **編碼模式** — VBR（品質 + 上限）或 CBR（固定碼率）
+     - **CRF／CQ** — 依輸出編碼的品質滑桿
+     - **Mapping（HDR→SDR）** — Mobius（預設）／BT.2390／Hable（`libplacebo`；需開啟 HDR→SDR）
+     - **碼率** — 「原始」或自訂預設  
+       - CBR 自訂：`2000 / 4000 / 5000 / 6000 / 8000 / 10000` kbps  
+       - 僅選「原始」時，倍速會自動 × 倍速調整碼率；自訂 CBR／VBR **不**隨倍速相乘
 5. **開始處理** — 下載 → 驗證 → 轉碼（若需要）→ 上傳 R2 → 以 R2 網址預覽
 6. **複製連結** — 完成後貼到 VRChat
 
@@ -305,9 +310,10 @@ docker run --rm -p 5000:5000 \
 
 | 條件 | 行為 |
 |------|------|
-| 原速（1.0x）且未開相容模式 | 僅 **faststart**（`-c copy`），不重編碼 |
-| 開啟 VRChat 相容模式 | H.264 重編碼 |
-| 播放速度 ≠ 1.0x | 時間拉伸 + H.264 重編碼 |
+| **保留原始**、原速、未開 HDR→SDR | 僅 **faststart**（`-c copy`） |
+| **AV1**（預設）或 **H.264** | 重編碼為該編碼（有硬體則優先） |
+| 播放速度 ≠ 1.0x | 時間拉伸 + 重編碼（無法保留原始） |
+| 開啟 **HDR → SDR** | tonemap（`libplacebo`）+ 重編碼 |
 
 完成範例：`https://pub-xxxx.r2.dev/f_abc123`
 
@@ -343,10 +349,11 @@ docker run --rm -p 5000:5000 \
 | `SPEED_BITRATE_FACTOR` | `1.0` | 「原始」碼率 × 倍速時的額外倍率 |
 | `DEFAULT_ENCODE_MODE` | `vbr` | `vbr` 或 `cbr` |
 | `DEFAULT_ENCODE_QUALITY` | `balanced` | `high`／`balanced`／`medium`／`small` |
+| `DEFAULT_OUTPUT_CODEC` | `av1` | `av1`／`h264`／`h265`（非「保留原始」時的 API 預設） |
 | `HOST` | `0.0.0.0` | 綁定位址 |
 | `PORT` | `5000` | HTTP 連接埠 |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt 靜態輸出目錄 |
-| `HW_ENCODER` | `auto` | `auto`、`libx264`、`h264_qsv`、`h264_nvenc` 等 |
+| `HW_ENCODER` | `auto` | `auto`、`av1_nvenc`、`libsvtav1`、`h264_nvenc`、`libx264`、`h264_qsv` 等 |
 | `DISABLE_HW_ACCEL` | 關閉 | `1` / `true` 強制僅用軟體編碼/解碼 |
 | `LOG_LEVEL` | `INFO` | 日誌級別 |
 | `DISABLE_ARIA2C` | 關閉 | `1` / `true` 停用 aria2c |
@@ -395,9 +402,10 @@ docker run --rm -p 5000:5000 \
 | YouTube 獲取格式失敗 | 安裝 Node.js，確認 `node -version` |
 | 找不到 `uv`／`bun` | 直接跑 `start.bat`／`start.sh`（會裝到 `.uv`／`.bun`），或依官方文件手動安裝 |
 | 前端空白／找不到頁面 | 執行 `cd frontend && bun install && bun run generate` |
-| Bilibili 很慢 | Windows：將 `aria2c.exe` 放在專案根目錄；或安裝 aria2 至 `PATH`。獲取格式時選擇非 H.264 編碼（如 AV1／H.265／VP9）也可加快下載 |
+| Bilibili 很慢 | Windows：將 `aria2c.exe` 放在專案根目錄；或安裝 aria2 至 `PATH`。獲取格式時選擇非 H.264 來源編碼（如 AV1／H.265／VP9）也可加快下載 |
 | 過期檔案仍在 bucket | 程式需持續運行才會清理；或等下一個掃描週期 |
-| VRChat 無法播放／不能 seek | 開啟 **VRChat 相容模式**；確認已設 `R2_PUBLIC_BASE_URL` |
-| 倍速後檔案異常變大 | 改用 **CBR** 或較低 VBR 上限／品質；確認碼率選的是自訂預設而非誤用無上限品質模式 |
+| VRChat 無法播放／不能 seek | 輸出模式選 **H.264**；確認已設 `R2_PUBLIC_BASE_URL` |
+| 倍速後檔案異常變大 | 改用 **CBR** 或較低 VBR 上限／CRF；確認碼率選的是自訂預設 |
 | 「貼上」無法讀剪貼簿 | 請用 `http://127.0.0.1:5000` 或 HTTPS；區網 HTTP 請允許後改 Ctrl+V，或手動貼上網址 |
-| 原速是否重編碼？ | 否（除非開相容模式）；下載後仍會做完整性驗證與 faststart |
+| HDR 過曝／灰階怪異 | 對 HDR 格式開啟 **HDR → SDR**，或換 **Mapping**（Mobius／BT.2390／Hable）。需 ffmpeg 含 **libplacebo** + Vulkan |
+| 原速是否重編碼？ | 僅**保留原始**且未開 HDR→SDR：否（驗證 + faststart）。**AV1**／**H.264**／倍速／HDR→SDR 都會重編碼 |
