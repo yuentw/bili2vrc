@@ -330,6 +330,15 @@ function copyRetroUrl() {
                   <div class="xp-hint">{{ app.outputModeHint }}</div>
                 </div>
               </div>
+              <div v-if="app.selectedIsHdr" class="field-row">
+                <div class="field-col field-col-full">
+                  <label class="xp-check-label">
+                    <input type="checkbox" v-model="app.tonemapHdr">
+                    <span>HDR → SDR（tonemap）</span>
+                  </label>
+                  <div class="xp-hint">{{ app.tonemapHdrHint }}</div>
+                </div>
+              </div>
 
               <details v-if="app.showAdvancedEncoding" class="xp-advanced-options">
                 <summary class="xp-advanced-summary">進階編碼選項</summary>
@@ -345,6 +354,24 @@ function copyRetroUrl() {
                         {{ option.label }}
                       </option>
                     </select>
+                  </div>
+                  <div v-if="app.selectedIsHdr" class="field-col">
+                    <label class="xp-label" for="tonemapAlgorithm">Mapping（HDR→SDR）:</label>
+                    <select
+                      class="xp-select"
+                      id="tonemapAlgorithm"
+                      v-model="app.tonemapAlgorithm"
+                      :disabled="!app.tonemapHdr"
+                    >
+                      <option
+                        v-for="option in app.tonemapAlgorithmOptions"
+                        :key="option.value"
+                        :value="option.value"
+                      >
+                        {{ option.label }}
+                      </option>
+                    </select>
+                    <div class="xp-hint">{{ app.tonemapAlgorithmHint }}</div>
                   </div>
                   <div class="field-col">
                     <label class="xp-label crf-label-row" for="encodeCrf">

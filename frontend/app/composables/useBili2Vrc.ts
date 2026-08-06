@@ -1,6 +1,7 @@
 import type { VideoFormat, VideoMeta } from './useFormatUtils'
 import {
   DEFAULT_CODEC_FAMILY,
+  isHdrRange,
   normalizeCodecFamily,
   pickDefaultCodecFamily,
   sortCodecFamilies,
@@ -46,10 +47,24 @@ export function useBili2Vrc() {
     if (outputMode.value === 'original') return 'h264'
     return outputMode.value
   })
-  const originalModeDisabled = computed(() => playbackSpeedForcesReencode.value)
+  const tonemapHdr = ref(false)
+  const tonemapHdrHint = '將所選 HDR 轉成 SDR（需重編碼）'
+  const tonemapAlgorithm = ref('mobius')
+  const tonemapAlgorithmOptions = [
+    { value: 'mobius', label: 'Mobius（預設）' },
+    { value: 'bt.2390', label: 'BT.2390' },
+    { value: 'hable', label: 'Hable' },
+  ]
+  const tonemapAlgorithmHint = '僅開啟 HDR→SDR 時套用（libplacebo）'
+  const originalModeDisabled = computed(
+    () => playbackSpeedForcesReencode.value || tonemapHdr.value,
+  )
   const showAdvancedEncoding = computed(() => outputMode.value !== 'original')
   const outputModeHint = computed(() => {
     if (outputMode.value === 'original') {
+      if (tonemapHdr.value) {
+        return 'HDR→SDR 需重編碼，無法保留原始編碼'
+      }
       return originalModeDisabled.value
         ? '非原速時無法保留原始編碼，已改為 AV1'
         : '僅套用 faststart，不重新編碼（最快）'
@@ -139,6 +154,12 @@ export function useBili2Vrc() {
     }
   })
 
+  watch(tonemapHdr, (enabled) => {
+    if (enabled && outputMode.value === 'original') {
+      outputMode.value = 'av1'
+    }
+  })
+
   watch(encodeMode, (mode) => {
     const source = sourceBitrateKbps.value
     const current = Number(bitrateKbps.value)
@@ -153,8 +174,13 @@ export function useBili2Vrc() {
   const filteredFormats = ref<VideoFormat[]>([])
   const selectedFormat = ref<VideoFormat | null>(null)
   const selectedIdx = ref(-1)
+  const selectedIsHdr = computed(() => isHdrRange(selectedFormat.value?.dynamic_range))
   const codecFamilies = ref<string[]>([])
   const codecFamily = ref(DEFAULT_CODEC_FAMILY)
+
+  watch(selectedIsHdr, (isHdr) => {
+    if (!isHdr) tonemapHdr.value = false
+  })
 
   const videoMeta = ref<VideoMeta | null>(null)
   const showVideoMeta = ref(false)
@@ -472,6 +498,8 @@ export function useBili2Vrc() {
             encode_crf: encodeCrf.value,
             output_codec: effectiveOutputCodec.value,
             scale_bitrate_with_speed: scaleBitrateWithSpeed.value,
+            tonemap_hdr: Boolean(tonemapHdr.value && selectedIsHdr.value),
+            tonemap_algorithm: tonemapAlgorithm.value || 'mobius',
           }),
         ),
       })
@@ -631,6 +659,12 @@ export function useBili2Vrc() {
     originalModeDisabled,
     showAdvancedEncoding,
     outputModeHint,
+    tonemapHdr,
+    tonemapHdrHint,
+    tonemapAlgorithm,
+    tonemapAlgorithmOptions,
+    tonemapAlgorithmHint,
+    selectedIsHdr,
     effectiveOutputCodec,
     encodeCrf,
     encodeCrfConfig,

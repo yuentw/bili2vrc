@@ -12,6 +12,7 @@ from bili2vrc import config
 from bili2vrc.constants import clamp_playback_speed
 from bili2vrc.download.cookies import get_cookie_args
 from bili2vrc.download.ytdlp import get_aria2c_cmd, get_ytdlp_js_args, should_use_aria2c
+from bili2vrc.encoding import hwaccel
 from bili2vrc.media.mp4 import apply_faststart, verify_mp4
 from bili2vrc.media.transcode import transcode_video
 from bili2vrc.services.process_controller import process_controller
@@ -35,6 +36,8 @@ def run_process(
     scale_bitrate_with_speed: bool,
     output_codec: str,
     encode_crf: int | None,
+    tonemap_hdr: bool,
+    tonemap_algorithm: str,
     cookie_path: str | None,
     job_id: str,
     cancel_event: threading.Event,
@@ -68,9 +71,9 @@ def run_process(
 
     try:
         logger.info(
-            "process start: job=%s url=%s format_id=%s ttl=%s compat=%s speed=%sx mode=%s quality=%s bitrate=%skbps scale_speed=%s",
+            "process start: job=%s url=%s format_id=%s ttl=%s compat=%s speed=%sx mode=%s quality=%s bitrate=%skbps scale_speed=%s tonemap_hdr=%s tonemap_algo=%s",
             job_id, url, format_id, ttl, compat_mode, clamp_playback_speed(playback_speed),
-            encode_mode, encode_quality, bitrate_kbps, scale_bitrate_with_speed,
+            encode_mode, encode_quality, bitrate_kbps, scale_bitrate_with_speed, tonemap_hdr, tonemap_algorithm,
         )
         if abort_if_cancelled():
             return
@@ -198,15 +201,28 @@ def run_process(
             compat_mode
             or abs(speed - 1.0) > 1e-6
             or effective_codec in ("av1", "h265")
+            or tonemap_hdr
         )
 
         if needs_transcode:
+            tonemap_note = " + HDR→SDR" if tonemap_hdr else ""
             if compat_mode and abs(speed - 1.0) > 1e-6:
-                emit("reencode", f"VRChat 相容模式 + 時間拉伸 {speed}x...")
+                emit("reencode", f"VRChat 相容模式 + 時間拉伸 {speed}x{tonemap_note}...")
             elif compat_mode:
-                emit("reencode", "重新編碼為 H.264 VRChat相容模式...")
+                emit("reencode", f"重新編碼為 H.264 VRChat相容模式{tonemap_note}...")
             elif abs(speed - 1.0) > 1e-6:
-                emit("stretch", f"時間拉伸 {speed}x（保留音高）...")
+                emit("stretch", f"時間拉伸 {speed}x（保留音高）{tonemap_note}...")
+            elif tonemap_hdr:
+                codec_label = config.OUTPUT_CODEC_LABELS.get(
+                    effective_codec, effective_codec.upper(),
+                )
+                algo_label = hwaccel.TONEMAP_ALGORITHM_LABELS.get(
+                    tonemap_algorithm, tonemap_algorithm,
+                )
+                emit(
+                    "reencode",
+                    f"HDR→SDR ({algo_label}) 並重新編碼為 {codec_label}...",
+                )
             else:
                 codec_label = config.OUTPUT_CODEC_LABELS.get(
                     effective_codec, effective_codec.upper(),
@@ -217,6 +233,8 @@ def run_process(
                 suffix = "_compat.mp4"
             elif abs(speed - 1.0) > 1e-6:
                 suffix = "_stretch.mp4"
+            elif tonemap_hdr:
+                suffix = f"_{effective_codec}_sdr.mp4"
             else:
                 suffix = f"_{effective_codec}.mp4"
             out_path = output_path.replace(".mp4", suffix)
@@ -231,6 +249,8 @@ def run_process(
                 encode_mode=encode_mode,
                 encode_crf=encode_crf,
                 scale_bitrate_with_speed=scale_bitrate_with_speed,
+                tonemap_hdr=tonemap_hdr,
+                tonemap_algorithm=tonemap_algorithm,
                 cancel_event=cancel_event,
                 register_proc=register_proc,
             )

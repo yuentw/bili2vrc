@@ -90,6 +90,8 @@ def transcode_video(
     encode_mode: str | None = None,
     encode_crf: int | None = None,
     scale_bitrate_with_speed: bool = True,
+    tonemap_hdr: bool = False,
+    tonemap_algorithm: str | None = None,
     cancel_event: threading.Event | None = None,
     register_proc=None,
 ) -> bool:
@@ -135,6 +137,8 @@ def transcode_video(
         encode_quality=quality,
         encode_mode=mode,
         encode_crf=encode_crf,
+        tonemap_hdr=tonemap_hdr,
+        tonemap_algorithm=tonemap_algorithm,
         cancel_event=cancel_event,
         register_proc=register_proc,
     )
@@ -166,6 +170,8 @@ def _transcode_video_try(
     encode_quality: str,
     encode_mode: str,
     encode_crf: int | None,
+    tonemap_hdr: bool,
+    tonemap_algorithm: str | None,
     cancel_event: threading.Event | None,
     register_proc,
 ) -> bool:
@@ -179,14 +185,21 @@ def _transcode_video_try(
         if index > 0:
             emit_fn(step, f"{encoders[index - 1].label} 失敗，改用 {encoder.label}…")
 
+        algo = hwaccel.normalize_tonemap_algorithm(tonemap_algorithm) if tonemap_hdr else ""
+        algo_label = hwaccel.TONEMAP_ALGORITHM_LABELS.get(algo, algo) if tonemap_hdr else ""
+        tonemap_note = f" + HDR→SDR ({algo_label})" if tonemap_hdr else ""
         if abs(speed - 1.0) > 1e-6:
-            emit_msg = f"時間拉伸 {speed}x + {codec_label} ({encoder.label})..."
+            emit_msg = f"時間拉伸 {speed}x + {codec_label} ({encoder.label}){tonemap_note}..."
         else:
-            emit_msg = f"重新編碼 {codec_label} ({encoder.label})..."
+            emit_msg = f"重新編碼 {codec_label} ({encoder.label}){tonemap_note}..."
         emit_fn(step, emit_msg)
 
         video_filter = hwaccel.compose_video_filter(
-            speed, encoder, source_fps=source_fps,
+            speed,
+            encoder,
+            source_fps=source_fps,
+            tonemap_hdr=tonemap_hdr,
+            tonemap_algorithm=tonemap_algorithm,
         )
         out_fps = hwaccel.resolve_output_fps(source_fps)
         decode_args = hwaccel.decode_hwaccel_args(encoder)

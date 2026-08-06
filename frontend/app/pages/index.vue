@@ -362,6 +362,13 @@ function onResultVideoLoad() {
               </div>
               <div class="field-hint">{{ app.outputModeHint }}</div>
             </div>
+            <div v-if="app.selectedIsHdr" class="field field-full">
+              <label class="compat-check">
+                <input type="checkbox" v-model="app.tonemapHdr">
+                <span>HDR → SDR（tonemap）</span>
+              </label>
+              <div class="field-hint">{{ app.tonemapHdrHint }}</div>
+            </div>
           </div>
 
           <details v-if="app.showAdvancedEncoding" class="advanced-options">
@@ -378,6 +385,19 @@ function onResultVideoLoad() {
                     {{ option.label }}
                   </option>
                 </select>
+              </div>
+              <div v-if="app.selectedIsHdr" class="field">
+                <label>Mapping（HDR→SDR）</label>
+                <select v-model="app.tonemapAlgorithm" :disabled="!app.tonemapHdr">
+                  <option
+                    v-for="option in app.tonemapAlgorithmOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+                <div class="field-hint">{{ app.tonemapAlgorithmHint }}</div>
               </div>
               <div class="field">
                 <label class="crf-label-row">

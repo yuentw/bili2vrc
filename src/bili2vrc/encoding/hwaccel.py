@@ -20,6 +20,35 @@ logger = logging.getLogger("bili2vrchat.hwaccel")
 VIDEO_FORMAT_FILTER = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p"
 # QSV prefers NV12 system-memory frames (avoids fragile hwupload on Windows).
 QSV_FORMAT_FILTER = "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=nv12"
+# HDR (PQ/HLG) → SDR BT.709 via libplacebo (supports Mobius / BT.2390 / Hable).
+TONEMAP_ALGORITHMS = ("mobius", "bt.2390", "hable")
+DEFAULT_TONEMAP_ALGORITHM = "mobius"
+TONEMAP_ALGORITHM_LABELS = {
+    "mobius": "Mobius",
+    "bt.2390": "BT.2390",
+    "hable": "Hable",
+}
+
+
+def hdr_tonemap_filter(algorithm: str | None = None) -> str:
+    algo = normalize_tonemap_algorithm(algorithm)
+    return (
+        f"libplacebo=tonemapping={algo}:"
+        "colorspace=bt709:color_primaries=bt709:color_trc=bt709"
+    )
+
+
+def normalize_tonemap_algorithm(algorithm: str | None = None) -> str:
+    key = str(algorithm or DEFAULT_TONEMAP_ALGORITHM).strip().lower()
+    aliases = {
+        "bt2390": "bt.2390",
+        "bt_2390": "bt.2390",
+        "itu-r bt.2390": "bt.2390",
+    }
+    key = aliases.get(key, key)
+    return key if key in TONEMAP_ALGORITHMS else DEFAULT_TONEMAP_ALGORITHM
+
+
 # Safe constant rates for HW encoders + VRChat / Unity VideoPlayer.
 SAFE_OUTPUT_FPS = (24, 25, 30, 50, 60)
 QSV_SAFE_FPS = SAFE_OUTPUT_FPS
@@ -760,8 +789,10 @@ def compose_video_filter(
     encoder: VideoEncoder,
     *,
     source_fps: float | None = None,
+    tonemap_hdr: bool = False,
+    tonemap_algorithm: str | None = None,
 ) -> str:
-    """Build video filter chain: optional speed + CFR + format + optional hw upload."""
+    """Build video filter chain: optional speed + CFR + tonemap + format + optional hw upload."""
     parts: list[str] = []
     out_fps = resolve_output_fps(source_fps)
     if abs(float(speed) - 1.0) > 1e-6:
@@ -770,6 +801,8 @@ def compose_video_filter(
         parts.append("setpts=PTS-STARTPTS")
     elif _is_qsv_encoder(encoder.name):
         parts.append(f"fps={out_fps}")
+    if tonemap_hdr:
+        parts.append(hdr_tonemap_filter(tonemap_algorithm))
     parts.append(encoder.format_filter)
     if encoder.hw_video_filter:
         parts.append(encoder.hw_video_filter)

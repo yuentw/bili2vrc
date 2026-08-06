@@ -11,6 +11,7 @@ from bili2vrc import config
 from bili2vrc.api.schemas import ProcessCancelRequest, ProcessRequest
 from bili2vrc.constants import clamp_playback_speed
 from bili2vrc.download.cookies import write_cookie_temp_file
+from bili2vrc.encoding import hwaccel
 from bili2vrc.services.pipeline import run_process
 from bili2vrc.services.process_controller import process_controller
 from bili2vrc.utils.platform import detect_platform, validate_cookie_for_url
@@ -64,6 +65,8 @@ def process_route(body: ProcessRequest):
         if body.encode_crf is not None
         else None
     )
+    tonemap_hdr = bool(body.tonemap_hdr)
+    tonemap_algorithm = hwaccel.normalize_tonemap_algorithm(body.tonemap_algorithm)
 
     cookie_content = (body.cookie_content or "").strip() or None
 
@@ -83,9 +86,9 @@ def process_route(body: ProcessRequest):
             return JSONResponse({"error": str(exc)}, status_code=400)
 
     logger.info(
-        "api/process: format_id=%s ttl=%s compat=%s speed=%sx codec=%s mode=%s quality=%s crf=%s bitrate=%skbps scale_speed=%s platform=%s cookie_used=%s",
+        "api/process: format_id=%s ttl=%s compat=%s speed=%sx codec=%s mode=%s quality=%s crf=%s bitrate=%skbps scale_speed=%s tonemap_hdr=%s tonemap_algo=%s platform=%s cookie_used=%s",
         format_id, ttl, compat_mode, playback_speed, output_codec, encode_mode, encode_quality, encode_crf, bitrate_kbps,
-        scale_bitrate_with_speed, url_platform, bool(cookie_content),
+        scale_bitrate_with_speed, tonemap_hdr, tonemap_algorithm, url_platform, bool(cookie_content),
     )
 
     event_queue: queue.Queue = queue.Queue()
@@ -96,7 +99,8 @@ def process_route(body: ProcessRequest):
         target=run_process,
         args=(
             url, format_id, key_phrase, ttl, compat_mode, playback_speed, bitrate_kbps,
-            encode_quality, encode_mode, scale_bitrate_with_speed, output_codec, encode_crf, cookie_path, job_id,
+            encode_quality, encode_mode, scale_bitrate_with_speed, output_codec, encode_crf,
+            tonemap_hdr, tonemap_algorithm, cookie_path, job_id,
             cancel_event, event_queue,
         ),
         daemon=True,
