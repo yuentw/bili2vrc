@@ -5,7 +5,7 @@ RUN bun install --frozen-lockfile
 COPY frontend/ ./
 RUN bun run generate
 
-FROM python:3.14-slim-bookworm
+FROM python:3.14-slim-trixie
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 
