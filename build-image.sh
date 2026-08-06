@@ -8,6 +8,14 @@ IMAGE_REF="${IMAGE_NAME}:${IMAGE_TAG}"
 BUILD_NUMBER="$(date +%Y%m%d-%H%M%S)"
 BUILD_REF="${IMAGE_NAME}:${BUILD_NUMBER}"
 
+IMAGE_TAGS=("${IMAGE_REF}" "${BUILD_REF}")
+
+if git rev-parse --git-dir >/dev/null 2>&1 && [[ -z "$(git status --porcelain)" ]]; then
+  COMMIT_SHA="$(git rev-parse HEAD)"
+  COMMIT_REF="${IMAGE_NAME}:${COMMIT_SHA}"
+  IMAGE_TAGS+=("${COMMIT_REF}")
+fi
+
 PUSH=false
 for arg in "$@"; do
   case "${arg}" in
@@ -16,18 +24,23 @@ for arg in "$@"; do
   esac
 done
 
-BUILD_ARGS=(--platform linux/amd64,linux/arm64 --pull -t "${IMAGE_REF}" -t "${BUILD_REF}" .)
+BUILD_ARGS=(--platform linux/amd64,linux/arm64 --pull)
+for tag in "${IMAGE_TAGS[@]}"; do
+  BUILD_ARGS+=(-t "${tag}")
+done
+BUILD_ARGS+=(.)
 
-echo "[bili2vrchat] Building Docker images: ${IMAGE_REF}, ${BUILD_REF}"
+echo "[bili2vrchat] Building Docker images: ${IMAGE_TAGS[*]}"
 docker buildx build "${BUILD_ARGS[@]}"
 
 
 if [[ "${PUSH}" == true ]]; then
-  echo "[bili2vrchat] Pushing Docker images: ${IMAGE_REF}, ${BUILD_REF}"
-  docker push "${IMAGE_REF}"
-  docker push "${BUILD_REF}"
+  echo "[bili2vrchat] Pushing Docker images: ${IMAGE_TAGS[*]}"
+  for tag in "${IMAGE_TAGS[@]}"; do
+    docker push "${tag}"
+  done
 else
-  echo "[bili2vrchat] Done: ${IMAGE_REF}, ${BUILD_REF}"
+  echo "[bili2vrchat] Done: ${IMAGE_TAGS[*]}"
 fi
 
 echo "Run: docker run --rm -p 5000:5000 -v \"\$(pwd)/temp:/app/temp\" ${IMAGE_REF}"

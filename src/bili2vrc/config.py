@@ -25,7 +25,7 @@ def _with_https(url: str) -> str:
     return cleaned
 
 
-# ── Cloudflare R2（S3-compatible API / S3 相容 API）──
+# ── Object storage (S3-compatible API / S3 相容 API) ──
 CF_ACCOUNT_ID        = os.environ.get("CF_ACCOUNT_ID", "Fill in CF Account ID here")
 R2_ACCESS_KEY_ID     = os.environ.get("R2_ACCESS_KEY_ID", "Fill in R2 Access Key ID here")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "Fill in R2 Secret Access Key here")
@@ -37,6 +37,40 @@ R2_PUBLIC_BASE_URL = _with_https(
 
 R2_CLEANUP_ENABLED   = os.environ.get("R2_CLEANUP_ENABLED", "1").lower() in ("1", "true", "yes", "on")
 R2_CLEANUP_INTERVAL  = int(os.environ.get("R2_CLEANUP_INTERVAL", "3600"))
+
+# S3_* overrides R2_* when set (MinIO, AWS S3, Backblaze B2, etc.)
+S3_ENDPOINT_URL      = os.environ.get("S3_ENDPOINT_URL", "").strip().rstrip("/")
+S3_REGION            = os.environ.get("S3_REGION", os.environ.get("AWS_REGION", "")).strip()
+S3_ACCESS_KEY_ID     = os.environ.get("S3_ACCESS_KEY_ID") or R2_ACCESS_KEY_ID
+S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY") or R2_SECRET_ACCESS_KEY
+S3_BUCKET_NAME       = os.environ.get("S3_BUCKET_NAME") or R2_BUCKET_NAME
+S3_PUBLIC_BASE_URL   = _with_https(os.environ.get("S3_PUBLIC_BASE_URL") or R2_PUBLIC_BASE_URL)
+
+
+def s3_endpoint_url() -> str | None:
+    """Custom S3 endpoint, or Cloudflare R2 when CF_ACCOUNT_ID is set."""
+    if is_set(S3_ENDPOINT_URL):
+        return S3_ENDPOINT_URL
+    if is_set(CF_ACCOUNT_ID):
+        return f"https://{CF_ACCOUNT_ID}.r2.cloudflarestorage.com"
+    return None
+
+
+def s3_region_name() -> str:
+    if is_set(S3_REGION):
+        return S3_REGION
+    endpoint = s3_endpoint_url() or ""
+    if "r2.cloudflarestorage.com" in endpoint:
+        return "auto"
+    return "us-east-1"
+
+
+def storage_configured() -> bool:
+    """True when access key, secret, and bucket are set for upload/cleanup."""
+    return all(
+        is_set(value)
+        for value in (S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET_NAME)
+    )
 
 # ── Local paths / 本地路徑 ──
 TEMP_DIR     = os.path.join(BASE_DIR, "temp")
