@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 
 from bili2vrc import config
 from bili2vrc.api.router import api_router
+from bili2vrc.download.ytdlp import get_js_runtime
 from bili2vrc.encoding import hwaccel
 from bili2vrc.logging_setup import setup_logging
 from bili2vrc.services.cleanup import start_r2_cleanup_thread
@@ -19,6 +20,17 @@ logger = logging.getLogger("bili2vrchat")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    js_runtime = get_js_runtime()
+    if js_runtime:
+        if js_runtime.path:
+            logger.info("yt-dlp js runtime: %s (%s)", js_runtime.name, js_runtime.path)
+        else:
+            logger.warning(
+                "yt-dlp js runtime forced but not found: %s (YTDLP_JS_RUNTIME=%s)",
+                js_runtime.name, config.YTDLP_JS_RUNTIME,
+            )
+    else:
+        logger.warning("yt-dlp js runtime: none found (YouTube may fail)")
     encoder = hwaccel.get_video_encoder(config.DEFAULT_OUTPUT_CODEC)
     logger.info(
         "video encoder (default %s): %s (%s)",

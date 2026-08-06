@@ -1,6 +1,5 @@
 PLAYBACK_SPEED_MIN = 0.5
 PLAYBACK_SPEED_MAX = 2.0
-YTDLP_JS_ARGS = ["--js-runtimes", "node", "--remote-components", "ejs:github"]
 
 
 def clamp_playback_speed(speed: float) -> float:

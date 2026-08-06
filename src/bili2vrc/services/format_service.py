@@ -2,8 +2,8 @@ import json
 import logging
 import subprocess
 
-from bili2vrc.constants import YTDLP_JS_ARGS
 from bili2vrc.download.cookies import get_cookie_args, temp_cookie_file
+from bili2vrc.download.ytdlp import get_ytdlp_js_args
 from bili2vrc.utils.formatting import (
     format_duration,
     format_size,
@@ -43,7 +43,7 @@ def fetch_formats(url: str, cookie_content: str | None) -> dict:
             cookie_args = get_cookie_args(cookie_path)
             cmd = [
                 "yt-dlp", "-J", "--no-playlist",
-                *YTDLP_JS_ARGS,
+                *get_ytdlp_js_args(),
                 *cookie_args,
                 url,
             ]

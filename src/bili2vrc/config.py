@@ -184,6 +184,11 @@ def normalize_output_codec(codec, *, compat_mode: bool = False) -> str:
     return DEFAULT_OUTPUT_CODEC
 
 
+YTDLP_JS_RUNTIME = os.environ.get("YTDLP_JS_RUNTIME", "auto").strip().lower()
+_YTDLP_JS_RUNTIME_CHOICES = ("auto", "node", "bun", "deno")
+if YTDLP_JS_RUNTIME not in _YTDLP_JS_RUNTIME_CHOICES:
+    YTDLP_JS_RUNTIME = "auto"
+
 HOST         = os.environ.get("HOST", "0.0.0.0")
 PORT         = int(os.environ.get("PORT", "5000"))
 HW_ENCODER   = os.environ.get("HW_ENCODER", "auto")

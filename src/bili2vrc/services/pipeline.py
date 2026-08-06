@@ -9,9 +9,9 @@ import threading
 import urllib.parse
 
 from bili2vrc import config
-from bili2vrc.constants import YTDLP_JS_ARGS, clamp_playback_speed
+from bili2vrc.constants import clamp_playback_speed
 from bili2vrc.download.cookies import get_cookie_args
-from bili2vrc.download.ytdlp import get_aria2c_cmd, should_use_aria2c
+from bili2vrc.download.ytdlp import get_aria2c_cmd, get_ytdlp_js_args, should_use_aria2c
 from bili2vrc.media.mp4 import apply_faststart, verify_mp4
 from bili2vrc.media.transcode import transcode_video
 from bili2vrc.services.process_controller import process_controller
@@ -78,7 +78,7 @@ def run_process(
         emit("info", "取得影片資訊...")
         cookie_args = get_cookie_args(cookie_path)
 
-        id_cmd = ["yt-dlp", "--get-id", "--no-playlist", *YTDLP_JS_ARGS, *cookie_args, url]
+        id_cmd = ["yt-dlp", "--get-id", "--no-playlist", *get_ytdlp_js_args(), *cookie_args, url]
         id_result = subprocess.run(
             id_cmd, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=30,
@@ -107,7 +107,7 @@ def run_process(
             "--merge-output-format", "mp4",
             "--no-playlist",
             "--newline",
-            *YTDLP_JS_ARGS,
+            *get_ytdlp_js_args(),
             "--retries", "15",
             "--fragment-retries", "15",
             "--retry-sleep", "3",
