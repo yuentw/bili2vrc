@@ -17,16 +17,17 @@ for arg in "$@"; do
 done
 
 BUILD_ARGS=(--platform linux/amd64,linux/arm64 --pull -t "${IMAGE_REF}" -t "${BUILD_REF}" .)
-if [[ "${PUSH}" == true ]]; then
-  BUILD_ARGS+=(--push)
-  echo "[bili2vrchat] Building and pushing Docker images: ${IMAGE_REF}, ${BUILD_REF}"
-else
-  echo "[bili2vrchat] Building Docker images: ${IMAGE_REF}, ${BUILD_REF}"
-fi
 
+echo "[bili2vrchat] Building Docker images: ${IMAGE_REF}, ${BUILD_REF}"
 docker buildx build "${BUILD_ARGS[@]}"
 
-echo "[bili2vrchat] Done: ${IMAGE_REF}, ${BUILD_REF}"
 
+if [[ "${PUSH}" == true ]]; then
+  echo "[bili2vrchat] Pushing Docker images: ${IMAGE_REF}, ${BUILD_REF}"
+  docker push "${IMAGE_REF}"
+  docker push "${BUILD_REF}"
+else
+  echo "[bili2vrchat] Done: ${IMAGE_REF}, ${BUILD_REF}"
+fi
 
 echo "Run: docker run --rm -p 5000:5000 -v \"\$(pwd)/temp:/app/temp\" ${IMAGE_REF}"
