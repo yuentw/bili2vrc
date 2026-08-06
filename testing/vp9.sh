@@ -1,0 +1,1 @@
+ffmpeg -i input.mp4 -c:v libvpx-vp9 -crf 30 -b:v 0 -c:a libopus -b:a 128k -vf "scale=1280:720" -tune zerolatency -g 120 -threads 12 -f webm output.webm
