@@ -1,5 +1,5 @@
 """
-hwaccel.py — ffmpeg 硬體/軟體編碼器偵測與參數預設（AV1 / H.264 / H.265）
+hwaccel.py — ffmpeg 硬體/軟體編碼器偵測與參數預設（AV1 / VP9 / H.264 / H.265）
 """
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ QSV_SAFE_FPS = SAFE_OUTPUT_FPS
 
 SOFTWARE_ENCODERS: dict[str, str] = {
     "av1": "libsvtav1",
+    "vp9": "libvpx-vp9",
     "h264": "libx264",
     "h265": "libx265",
 }
@@ -37,6 +38,9 @@ ENCODER_PRESETS: dict[str, tuple[str, list[str], str | None]] = {
     "av1_vaapi": ("VAAPI AV1", [], "format=nv12,hwupload"),
     "av1_videotoolbox": ("VideoToolbox AV1 (Apple)", [], None),
     "libsvtav1": ("libsvtav1 (軟體)", [], None),
+    "vp9_qsv": ("Quick Sync VP9 (Intel)", [], None),
+    "vp9_vaapi": ("VAAPI VP9", [], "format=nv12,hwupload"),
+    "libvpx-vp9": ("libvpx-vp9 (軟體)", [], None),
     "h264_nvenc": (
         "NVENC (NVIDIA)",
         ["-preset", "p4", "-rc", "vbr", "-cq", "23", "-profile:v", "main", "-b:v", "0"],
@@ -81,6 +85,11 @@ PLATFORM_CANDIDATES_BY_CODEC: dict[str, dict[str, list[str]]] = {
         "win32": ["av1_nvenc", "av1_qsv", "av1_amf"],
         "linux": ["av1_nvenc", "av1_vaapi", "av1_qsv"],
     },
+    "vp9": {
+        "darwin": [],
+        "win32": ["vp9_qsv"],
+        "linux": ["vp9_vaapi", "vp9_qsv"],
+    },
     "h264": {
         "darwin": ["h264_videotoolbox"],
         "win32": ["h264_nvenc", "h264_qsv", "h264_amf"],
@@ -115,6 +124,8 @@ def _codec_for_encoder(name: str) -> str:
                 return codec
     if name.startswith("av1_"):
         return "av1"
+    if name.startswith("vp9_"):
+        return "vp9"
     if name.startswith("hevc_"):
         return "h265"
     return "h264"
@@ -164,6 +175,16 @@ def _svtav1_preset(quality_key: str) -> str:
     }.get(quality_key, "6")
 
 
+def _vp9_cpu_used(quality_key: str) -> str:
+    # libvpx-vp9: lower cpu-used = slower / better
+    return {
+        "high": "2",
+        "balanced": "4",
+        "medium": "5",
+        "small": "8",
+    }.get(quality_key, "4")
+
+
 def _qsv_lookahead(quality_key: str) -> str:
     return "1" if quality_key in ("high", "balanced") else "0"
 
@@ -181,7 +202,7 @@ def video_encode_args(
     output_codec: str | None = None,
 ) -> list[str]:
     """
-    Encode args for AV1 / H.264 / H.265 encoders.
+    Encode args for AV1 / VP9 / H.264 / H.265 encoders.
 
     encode_mode=cbr: fixed bitrate (+ quality affects encoder preset / look-ahead).
     encode_mode=vbr: quality (CRF/CQ) with bitrate_kbps as hard maxrate ceiling.
@@ -201,6 +222,7 @@ def video_encode_args(
     x264_preset = _x264_preset(quality_key)
     x265_preset = _x265_preset(quality_key)
     svtav1_preset = _svtav1_preset(quality_key)
+    vp9_cpu = _vp9_cpu_used(quality_key)
     qsv_lookahead = _qsv_lookahead(quality_key)
     amf_quality = _amf_quality(quality_key)
     h264_profile = ["-profile:v", "main"]
@@ -223,6 +245,11 @@ def video_encode_args(
             return [
                 "-preset", svtav1_preset, "-rc", "1",
                 "-b:v", bitrate, "-maxrate", maxrate, "-bufsize", bufsize,
+            ]
+        if encoder_name == "libvpx-vp9":
+            return [
+                "-b:v", bitrate, "-minrate", bitrate, "-maxrate", maxrate,
+                "-bufsize", bufsize, "-cpu-used", vp9_cpu, "-row-mt", "1",
             ]
         if encoder_name in ("h264_nvenc", "hevc_nvenc", "av1_nvenc"):
             profile = hevc_profile if encoder_name == "hevc_nvenc" else h264_profile
@@ -272,6 +299,11 @@ def video_encode_args(
         return [
             "-preset", svtav1_preset, "-crf", crf,
             "-maxrate", maxrate, "-bufsize", bufsize,
+        ]
+    if encoder_name == "libvpx-vp9":
+        return [
+            "-crf", crf, "-b:v", target, "-maxrate", maxrate, "-bufsize", bufsize,
+            "-cpu-used", vp9_cpu, "-row-mt", "1",
         ]
     if encoder_name in ("h264_nvenc", "hevc_nvenc", "av1_nvenc"):
         profile = hevc_profile if encoder_name == "hevc_nvenc" else h264_profile

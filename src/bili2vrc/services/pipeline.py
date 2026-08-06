@@ -197,7 +197,7 @@ def run_process(
         needs_transcode = (
             compat_mode
             or abs(speed - 1.0) > 1e-6
-            or effective_codec == "av1"
+            or effective_codec in ("av1", "vp9", "h265")
         )
 
         if needs_transcode:
@@ -208,7 +208,9 @@ def run_process(
             elif abs(speed - 1.0) > 1e-6:
                 emit("stretch", f"時間拉伸 {speed}x（保留音高）...")
             else:
-                codec_label = "AV1" if effective_codec == "av1" else effective_codec.upper()
+                codec_label = config.OUTPUT_CODEC_LABELS.get(
+                    effective_codec, effective_codec.upper(),
+                )
                 emit("reencode", f"重新編碼為 {codec_label}...")
 
             if compat_mode:
@@ -244,7 +246,7 @@ def run_process(
             else:
                 if abs(speed - 1.0) > 1e-6:
                     logger.error("speed stretch failed; abort upload")
-                    emit_error("時間拉伸失敗（未套用倍速）。請重試，或先開 VRChat 相容模式再試")
+                    emit_error("時間拉伸失敗（未套用倍速）。請重試，或改選 H264 輸出模式再試")
                     return
                 fail_msg = "⚠ 處理失敗，使用原始檔案上傳"
                 logger.warning("transcode fallback to original: %s", output_path)

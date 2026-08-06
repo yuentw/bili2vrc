@@ -1,4 +1,4 @@
-export type OutputCodecKey = 'h264' | 'h265' | 'av1'
+export type OutputCodecKey = 'h264' | 'h265' | 'av1' | 'vp9'
 
 /** Shown under slider; CRF/CQ: lower = better, 0 ≈ lossless. */
 export const CRF_QUALITY_NOTE =
@@ -32,10 +32,17 @@ export const ENCODE_CRF_CONFIG: Record<
     default: 30,
     hint: `${CRF_QUALITY_NOTE} AV1 (SVT-AV1)：0–63，尺度不同，28–35 常用；同視覺品質下數值通常高於 H.264。`,
   },
+  vp9: {
+    min: 0,
+    max: 63,
+    default: 31,
+    hint: `${CRF_QUALITY_NOTE} VP9 (libvpx-vp9)：0–63，28–35 常用；壓縮優於 H.264，部分播放器／VRChat 相容性不如 H.264。`,
+  },
 }
 
 export function normalizeOutputCodecKey(codec: string): OutputCodecKey {
   if (codec === 'av1') return 'av1'
+  if (codec === 'vp9') return 'vp9'
   if (codec === 'h265' || codec === 'hevc') return 'h265'
   return 'h264'
 }
@@ -51,5 +58,6 @@ export function defaultEncodeCrfByCodec(): Record<OutputCodecKey, number> {
     h264: ENCODE_CRF_CONFIG.h264.default,
     h265: ENCODE_CRF_CONFIG.h265.default,
     av1: ENCODE_CRF_CONFIG.av1.default,
+    vp9: ENCODE_CRF_CONFIG.vp9.default,
   }
 }

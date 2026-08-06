@@ -34,27 +34,34 @@ export function useBili2Vrc() {
   const encodeQuality = ref('balanced')
   const encodeMode = ref('vbr')
   const encodeCrfByCodec = ref(defaultEncodeCrfByCodec())
-  type OutputMode = 'original' | 'compat' | 'av1'
-  const outputMode = ref<OutputMode>('original')
+  type OutputMode = 'original' | 'vp9' | 'av1' | 'h264'
+  const outputMode = ref<OutputMode>('vp9')
   const outputModeOptions: { value: OutputMode; label: string }[] = [
     { value: 'original', label: '保留原始' },
-    { value: 'compat', label: 'VRChat 相容' },
+    { value: 'vp9', label: 'VP9（預設）' },
     { value: 'av1', label: 'AV1' },
+    { value: 'h264', label: 'H264' },
   ]
-  const compatMode = computed(() => outputMode.value === 'compat')
-  const effectiveOutputCodec = computed(() => (outputMode.value === 'av1' ? 'av1' : 'h264'))
+  const compatMode = computed(() => outputMode.value === 'h264')
+  const effectiveOutputCodec = computed(() => {
+    if (outputMode.value === 'original') return 'h264'
+    return outputMode.value
+  })
   const originalModeDisabled = computed(() => playbackSpeedForcesReencode.value)
   const showAdvancedEncoding = computed(() => outputMode.value !== 'original')
   const outputModeHint = computed(() => {
     if (outputMode.value === 'original') {
       return originalModeDisabled.value
-        ? '非原速時無法保留原始編碼，已改為 VRChat 相容模式'
+        ? '非原速時無法保留原始編碼，已改為 VP9'
         : '僅套用 faststart，不重新編碼（最快）'
     }
-    if (outputMode.value === 'compat') {
-      return '重新編碼為 H.264 Main Profile，修復 VRChat 固定時間點撕裂問題'
+    if (outputMode.value === 'vp9') {
+      return '重新編碼為 VP9：檔案通常小於 H.264；部分舊播放器／VRChat 相容性較差'
     }
-    return '重新編碼為 AV1，檔案較小但處理較慢，舊顯示卡不支援加速解碼'
+    if (outputMode.value === 'av1') {
+      return '重新編碼為 AV1，檔案較小但處理較慢，舊顯示卡不支援加速解碼'
+    }
+    return '重新編碼為 H.264 Main Profile，修復 VRChat 固定時間點撕裂問題'
   })
 
   function setOutputMode(mode: OutputMode) {
@@ -77,6 +84,7 @@ export function useBili2Vrc() {
   const encodeCrfLabel = computed(() => {
     const key = normalizeOutputCodecKey(effectiveOutputCodec.value)
     if (key === 'av1') return 'CRF（AV1）'
+    if (key === 'vp9') return 'CRF（VP9）'
     return 'CRF（品質）'
   })
   const vbrBitratePresets = [1500, 2000, 3000, 4000, 5000, 8000]
@@ -132,7 +140,7 @@ export function useBili2Vrc() {
 
   watch(playbackSpeed, () => {
     if (originalModeDisabled.value && outputMode.value === 'original') {
-      outputMode.value = 'compat'
+      outputMode.value = 'vp9'
     }
   })
 
