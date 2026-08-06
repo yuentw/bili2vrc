@@ -395,7 +395,7 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | YouTube fetch fails | Install Node.js; run `node -version` |
 | `uv` / `bun` not found | Run `start.bat` / `start.sh` (installs into `.uv` / `.bun`), or install manually |
 | Frontend missing / blank UI | Run `cd frontend && bun install && bun run generate` |
-| Bilibili slow | Add `aria2c.exe` to project root (Windows) or install aria2 to `PATH` |
+| Bilibili slow | Add `aria2c.exe` to project root (Windows) or install aria2 to `PATH`. When fetching formats, choosing a non-H.264 codec (e.g. AV1 / H.265 / VP9) can also speed up downloads |
 | Expired files still in bucket | App must be running for cleanup; or wait until next scan interval |
 | VRChat won’t play / can’t seek | Enable **VRChat compat mode**; ensure `R2_PUBLIC_BASE_URL` is set |
 | File balloons after speed change | Use **CBR** or a lower VBR ceiling / quality; prefer custom bitrate presets |

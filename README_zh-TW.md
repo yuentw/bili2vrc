@@ -395,7 +395,7 @@ docker run --rm -p 5000:5000 \
 | YouTube 獲取格式失敗 | 安裝 Node.js，確認 `node -version` |
 | 找不到 `uv`／`bun` | 直接跑 `start.bat`／`start.sh`（會裝到 `.uv`／`.bun`），或依官方文件手動安裝 |
 | 前端空白／找不到頁面 | 執行 `cd frontend && bun install && bun run generate` |
-| Bilibili 很慢 | Windows：將 `aria2c.exe` 放在專案根目錄；或安裝 aria2 至 `PATH` |
+| Bilibili 很慢 | Windows：將 `aria2c.exe` 放在專案根目錄；或安裝 aria2 至 `PATH`。獲取格式時選擇非 H.264 編碼（如 AV1／H.265／VP9）也可加快下載 |
 | 過期檔案仍在 bucket | 程式需持續運行才會清理；或等下一個掃描週期 |
 | VRChat 無法播放／不能 seek | 開啟 **VRChat 相容模式**；確認已設 `R2_PUBLIC_BASE_URL` |
 | 倍速後檔案異常變大 | 改用 **CBR** 或較低 VBR 上限／品質；確認碼率選的是自訂預設而非誤用無上限品質模式 |
