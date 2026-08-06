@@ -5,7 +5,7 @@ RUN bun install --frozen-lockfile
 COPY frontend/ ./
 RUN bun run generate
 
-FROM python:3.14-slim-bookworm
+FROM python:3.14-slim-trixie
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -26,10 +26,13 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project
 
-COPY app.py ./
+COPY app.py README.md ./
 COPY src/bili2vrc/ ./src/bili2vrc/
 COPY --from=frontend-build /frontend/.output/public ./frontend/.output/public
 COPY cookies/README.md cookies/
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen
 
 RUN mkdir -p temp
 
