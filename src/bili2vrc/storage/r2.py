@@ -1,4 +1,4 @@
-"""Cloudflare R2 upload helpers (S3-compatible API)."""
+"""S3-compatible object storage upload helpers (Cloudflare R2, AWS S3, MinIO, …)."""
 import logging
 import secrets
 import time
@@ -26,25 +26,27 @@ def get_client():
 
     missing = [
         name for name, value in (
-            ("CF_ACCOUNT_ID", config.CF_ACCOUNT_ID),
-            ("R2_ACCESS_KEY_ID", config.R2_ACCESS_KEY_ID),
-            ("R2_SECRET_ACCESS_KEY", config.R2_SECRET_ACCESS_KEY),
-            ("R2_BUCKET_NAME", config.R2_BUCKET_NAME),
+            ("S3_ACCESS_KEY_ID or R2_ACCESS_KEY_ID", config.S3_ACCESS_KEY_ID),
+            ("S3_SECRET_ACCESS_KEY or R2_SECRET_ACCESS_KEY", config.S3_SECRET_ACCESS_KEY),
+            ("S3_BUCKET_NAME or R2_BUCKET_NAME", config.S3_BUCKET_NAME),
         )
         if not config.is_set(value)
     ]
     if missing:
         raise RuntimeError(
-            "請設定 R2 環境變數：" + "、".join(missing)
+            "請設定 S3 環境變數：" + "、".join(missing)
         )
 
-    _client = boto3.client(
-        "s3",
-        endpoint_url=f"https://{config.CF_ACCOUNT_ID}.r2.cloudflarestorage.com",
-        aws_access_key_id=config.R2_ACCESS_KEY_ID,
-        aws_secret_access_key=config.R2_SECRET_ACCESS_KEY,
-        region_name="auto",
-    )
+    client_kwargs = {
+        "aws_access_key_id": config.S3_ACCESS_KEY_ID,
+        "aws_secret_access_key": config.S3_SECRET_ACCESS_KEY,
+        "region_name": config.s3_region_name(),
+    }
+    endpoint_url = config.s3_endpoint_url()
+    if endpoint_url:
+        client_kwargs["endpoint_url"] = endpoint_url
+
+    _client = boto3.client("s3", **client_kwargs)
     return _client
 
 
@@ -56,14 +58,14 @@ def resolve_object_key(key_phrase: str) -> tuple[str, str | None]:
 
     client = get_client()
     try:
-        client.head_object(Bucket=config.R2_BUCKET_NAME, Key=key)
+        client.head_object(Bucket=config.S3_BUCKET_NAME, Key=key)
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code", "")
         if code in ("404", "NoSuchKey", "NotFound"):
             return key, None
         raise
 
-    return "", f"路徑「{key}」已有檔案，請換一個名稱，或至 R2 手動刪除後重試"
+    return "", f"路徑「{key}」已有檔案，請換一個名稱，或至 bucket 手動刪除後重試"
 
 
 def expires_value_for_ttl(ttl_seconds: int) -> str:
@@ -91,12 +93,12 @@ def purge_expired_objects() -> tuple[int, int]:
     deleted = 0
 
     paginator = client.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=config.R2_BUCKET_NAME):
+    for page in paginator.paginate(Bucket=config.S3_BUCKET_NAME):
         for item in page.get("Contents", []):
             key = item["Key"]
             scanned += 1
             try:
-                head = client.head_object(Bucket=config.R2_BUCKET_NAME, Key=key)
+                head = client.head_object(Bucket=config.S3_BUCKET_NAME, Key=key)
             except ClientError:
                 continue
 
@@ -110,9 +112,9 @@ def purge_expired_objects() -> tuple[int, int]:
                 continue
 
             if now_ms > expire_ts:
-                client.delete_object(Bucket=config.R2_BUCKET_NAME, Key=key)
+                client.delete_object(Bucket=config.S3_BUCKET_NAME, Key=key)
                 deleted += 1
-                logger.info("r2 expired delete: %s", key)
+                logger.info("s3 expired delete: %s", key)
 
     return scanned, deleted
 
@@ -148,7 +150,7 @@ def upload_file(
     with open(local_path, "rb") as file_obj:
         client.upload_fileobj(
             file_obj,
-            config.R2_BUCKET_NAME,
+            config.S3_BUCKET_NAME,
             object_key,
             ExtraArgs={
                 "ContentType": "video/mp4",
@@ -160,11 +162,11 @@ def upload_file(
             Callback=callback,
         )
 
-    logger.info("r2 upload ok: key=%s bytes=%s", object_key, file_size)
+    logger.info("s3 upload ok: key=%s bytes=%s", object_key, file_size)
 
 
 def build_object_url(object_key: str) -> str:
-    """Return public HTTP URL if R2_PUBLIC_BASE_URL is set, else r2://bucket/key."""
-    if config.is_set(config.R2_PUBLIC_BASE_URL):
-        return f"{config.R2_PUBLIC_BASE_URL}/{object_key}"
-    return f"r2://{config.R2_BUCKET_NAME}/{object_key}"
+    """Return public HTTP URL if S3_PUBLIC_BASE_URL is set, else s3://bucket/key."""
+    if config.is_set(config.S3_PUBLIC_BASE_URL):
+        return f"{config.S3_PUBLIC_BASE_URL}/{object_key}"
+    return f"s3://{config.S3_BUCKET_NAME}/{object_key}"

@@ -9,15 +9,7 @@ logger = logging.getLogger("bili2vrchat")
 
 
 def r2_credentials_configured() -> bool:
-    return all(
-        config.is_set(value)
-        for value in (
-            config.CF_ACCOUNT_ID,
-            config.R2_ACCESS_KEY_ID,
-            config.R2_SECRET_ACCESS_KEY,
-            config.R2_BUCKET_NAME,
-        )
-    )
+    return config.storage_configured()
 
 
 def run_r2_cleanup() -> None:
@@ -35,7 +27,7 @@ def start_r2_cleanup_thread() -> None:
         logger.info("r2 cleanup disabled")
         return
     if not r2_credentials_configured():
-        logger.warning("r2 cleanup skipped: R2 credentials not configured")
+        logger.warning("r2 cleanup skipped: storage credentials not configured")
         return
 
     def cleanup_loop() -> None:
