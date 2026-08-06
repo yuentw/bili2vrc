@@ -252,7 +252,13 @@ def video_encode_args(
                 "-bufsize", bufsize, "-cpu-used", vp9_cpu, "-row-mt", "1",
             ]
         if encoder_name in ("h264_nvenc", "hevc_nvenc", "av1_nvenc"):
-            profile = hevc_profile if encoder_name == "hevc_nvenc" else h264_profile
+            # av1_nvenc has no H.264-style -profile:v main
+            if encoder_name == "hevc_nvenc":
+                profile = hevc_profile
+            elif encoder_name == "h264_nvenc":
+                profile = h264_profile
+            else:
+                profile = []
             return [
                 "-preset", nvenc_preset, "-rc", "cbr", *profile,
                 "-b:v", bitrate, "-minrate", bitrate, "-maxrate", maxrate,
@@ -273,8 +279,10 @@ def video_encode_args(
             ]
         if encoder_name.endswith("_amf"):
             profile = h264_profile if encoder_name.startswith("h264_") else []
+            # av1_amf uses hqcbr/qvbr, not cbr/vbr
+            amf_rc = "hqcbr" if encoder_name == "av1_amf" else "cbr"
             return [
-                "-quality", amf_quality, *profile, "-rc", "cbr",
+                "-quality", amf_quality, *profile, "-rc", amf_rc,
                 "-b:v", bitrate, "-maxrate", maxrate,
             ]
         sw = SOFTWARE_ENCODERS.get(_codec_for_encoder(encoder_name), "libx264")
@@ -306,7 +314,13 @@ def video_encode_args(
             "-cpu-used", vp9_cpu, "-row-mt", "1",
         ]
     if encoder_name in ("h264_nvenc", "hevc_nvenc", "av1_nvenc"):
-        profile = hevc_profile if encoder_name == "hevc_nvenc" else h264_profile
+        # av1_nvenc has no H.264-style -profile:v main
+        if encoder_name == "hevc_nvenc":
+            profile = hevc_profile
+        elif encoder_name == "h264_nvenc":
+            profile = h264_profile
+        else:
+            profile = []
         return [
             "-preset", nvenc_preset, "-rc", "vbr", "-cq", cq, *profile,
             "-b:v", target, "-maxrate", maxrate, "-bufsize", bufsize,
@@ -325,8 +339,10 @@ def video_encode_args(
         ]
     if encoder_name.endswith("_amf"):
         profile = h264_profile if encoder_name.startswith("h264_") else []
+        # av1_amf uses hqcbr/qvbr, not cbr/vbr
+        amf_rc = "qvbr" if encoder_name == "av1_amf" else "vbr"
         return [
-            "-quality", amf_quality, *profile, "-rc", "vbr",
+            "-quality", amf_quality, *profile, "-rc", amf_rc,
             "-b:v", target, "-maxrate", maxrate, "-bufsize", bufsize,
         ]
 
