@@ -107,8 +107,8 @@ def clamp_encode_crf(crf, output_codec: str) -> int:
     try:
         value = int(crf)
     except (TypeError, ValueError):
-        value = 31 if codec in ("av1", "vp9") else 19
-    if codec in ("av1", "vp9"):
+        value = 31 if codec == "av1" else 19
+    if codec == "av1":
         return max(0, min(63, value))
     return max(0, min(51, value))
 
@@ -161,14 +161,13 @@ def effective_bitrate_kbps(bitrate_kbps, playback_speed: float) -> int:
     return clamp_bitrate_kbps(int(round(base * speed * factor)))
 
 
-OUTPUT_CODECS = ("av1", "vp9", "h264", "h265")
-DEFAULT_OUTPUT_CODEC = os.environ.get("DEFAULT_OUTPUT_CODEC", "vp9").strip().lower()
+OUTPUT_CODECS = ("av1", "h264", "h265")
+DEFAULT_OUTPUT_CODEC = os.environ.get("DEFAULT_OUTPUT_CODEC", "av1").strip().lower()
 if DEFAULT_OUTPUT_CODEC not in OUTPUT_CODECS:
-    DEFAULT_OUTPUT_CODEC = "vp9"
+    DEFAULT_OUTPUT_CODEC = "av1"
 
 OUTPUT_CODEC_LABELS = {
     "av1": "AV1",
-    "vp9": "VP9",
     "h264": "H.264",
     "h265": "H.265",
 }

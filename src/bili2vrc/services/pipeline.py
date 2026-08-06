@@ -197,7 +197,7 @@ def run_process(
         needs_transcode = (
             compat_mode
             or abs(speed - 1.0) > 1e-6
-            or effective_codec in ("av1", "vp9", "h265")
+            or effective_codec in ("av1", "h265")
         )
 
         if needs_transcode:

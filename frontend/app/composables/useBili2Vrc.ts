@@ -34,12 +34,11 @@ export function useBili2Vrc() {
   const encodeQuality = ref('balanced')
   const encodeMode = ref('vbr')
   const encodeCrfByCodec = ref(defaultEncodeCrfByCodec())
-  type OutputMode = 'original' | 'vp9' | 'av1' | 'h264'
-  const outputMode = ref<OutputMode>('vp9')
+  type OutputMode = 'original' | 'av1' | 'h264'
+  const outputMode = ref<OutputMode>('av1')
   const outputModeOptions: { value: OutputMode; label: string }[] = [
     { value: 'original', label: '保留原始' },
-    { value: 'vp9', label: 'VP9（預設）' },
-    { value: 'av1', label: 'AV1' },
+    { value: 'av1', label: 'AV1（預設）' },
     { value: 'h264', label: 'H264' },
   ]
   const compatMode = computed(() => outputMode.value === 'h264')
@@ -52,14 +51,11 @@ export function useBili2Vrc() {
   const outputModeHint = computed(() => {
     if (outputMode.value === 'original') {
       return originalModeDisabled.value
-        ? '非原速時無法保留原始編碼，已改為 VP9'
+        ? '非原速時無法保留原始編碼，已改為 AV1'
         : '僅套用 faststart，不重新編碼（最快）'
     }
-    if (outputMode.value === 'vp9') {
-      return '重新編碼為 VP9：檔案通常小於 H.264；部分舊播放器／VRChat 相容性較差'
-    }
     if (outputMode.value === 'av1') {
-      return '重新編碼為 AV1，檔案較小但處理較慢，舊顯示卡不支援加速解碼'
+      return '重新編碼為 AV1，檔案較小；NVIDIA 40 系等支援硬體編碼'
     }
     return '重新編碼為 H.264 Main Profile，修復 VRChat 固定時間點撕裂問題'
   })
@@ -84,7 +80,6 @@ export function useBili2Vrc() {
   const encodeCrfLabel = computed(() => {
     const key = normalizeOutputCodecKey(effectiveOutputCodec.value)
     if (key === 'av1') return 'CRF（AV1）'
-    if (key === 'vp9') return 'CRF（VP9）'
     return 'CRF（品質）'
   })
   const vbrBitratePresets = [1500, 2000, 3000, 4000, 5000, 8000]
@@ -140,7 +135,7 @@ export function useBili2Vrc() {
 
   watch(playbackSpeed, () => {
     if (originalModeDisabled.value && outputMode.value === 'original') {
-      outputMode.value = 'vp9'
+      outputMode.value = 'av1'
     }
   })
 
