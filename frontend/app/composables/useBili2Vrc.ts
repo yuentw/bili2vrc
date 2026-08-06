@@ -4,6 +4,7 @@ import {
   normalizeCodecFamily,
   pickDefaultCodecFamily,
   sortCodecFamilies,
+  writePreferredCodecFamily,
 } from './useFormatUtils'
 import {
   ENCODE_CRF_CONFIG,
@@ -302,6 +303,14 @@ export function useBili2Vrc() {
 
     fmtTableMessage.value = ''
     selectFormat(0)
+  }
+
+  function setCodecFamily(family: string) {
+    const key = String(family || '').trim().toLowerCase()
+    if (!key) return
+    codecFamily.value = key
+    writePreferredCodecFamily(key)
+    applyCodecFilter()
   }
 
   function selectFormat(index: number) {
@@ -632,6 +641,7 @@ export function useBili2Vrc() {
     selectedIdx,
     codecFamilies,
     codecFamily,
+    setCodecFamily,
     videoMeta,
     showVideoMeta,
     fmtTableMessage,

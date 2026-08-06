@@ -220,7 +220,7 @@ function copyRetroUrl() {
                     class="xp-btn codec-btn"
                     :class="{ active: app.codecFamily === family }"
                     :disabled="app.codecFamilies.length <= 1"
-                    @click="app.codecFamily = family; app.applyCodecFilter()"
+                    @click="app.setCodecFamily(family)"
                   >
                     {{ codecFamilyLabel(family) }}
                   </button>

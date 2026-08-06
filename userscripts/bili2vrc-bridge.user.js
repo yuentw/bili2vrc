@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         bili2vrc Bridge
 // @namespace    https://github.com/yuentw/bili2vrc
-// @version      1.0.8
+// @version      1.0.9
 // @description  Bilibili 封面懸浮「下載解析」→ 開啟 bili2vrc 並自動填入網址、獲取格式
 // @author       bili2vrc
 // @match        https://www.bilibili.com/*
@@ -40,24 +40,6 @@
     'header',
     'nav',
   ].join(', ');
-
-  // Observe only content regions — never #app/#biliMainHeader/body (breaks header micro-frontend)
-  const OBSERVE_ROOT_SELECTORS = [
-    '#mirror-vdcon',
-    '.recommend-list-v1',
-    '.recommend-list-container',
-    '#reco_list',
-    '.right-container',
-    '.fav-list-main',
-    '.fav-video-list',
-    '.section-cards',
-    '.video-list',
-    '.feed-card',
-    '.bili-feed4-layout',
-    '.search-content',
-    '.bili-video-card__wrap',
-    '.video-page-card-small',
-  ];
 
   const COVER_SELECTORS = [
     '.video-card .pic-box',
@@ -470,113 +452,58 @@
     });
   }
 
-  function headerReady() {
-    const mount = document.getElementById('biliMainHeader');
-    if (!mount) return true; // pages without this mount
-    return Boolean(mount.querySelector('.bili-header, .bili-header__bar, .mini-header'));
-  }
-
-  function waitForHeader(timeoutMs = 8000) {
-    return new Promise((resolve) => {
-      if (headerReady()) {
-        resolve(true);
-        return;
-      }
-      const started = Date.now();
-      const timer = window.setInterval(() => {
-        if (headerReady() || Date.now() - started > timeoutMs) {
-          window.clearInterval(timer);
-          resolve(headerReady());
-        }
-      }, 100);
-    });
-  }
-
-  function collectObserveRoots() {
-    const roots = [];
-    const seen = new Set();
-    OBSERVE_ROOT_SELECTORS.forEach((selector) => {
-      document.querySelectorAll(selector).forEach((el) => {
-        if (inHeader(el) || seen.has(el)) return;
-        // Never observe the header mount itself
-        if (el.id === 'biliMainHeader') return;
-        seen.add(el);
-        roots.push(el);
-      });
-    });
-    return roots;
-  }
-
-  function startObservers(rescan) {
-    const observers = [];
-    const attach = (root) => {
-      const observer = new MutationObserver((mutations) => {
-        if (mutationsAreOurs(mutations)) return;
-        // Ignore mutations inside header mount
-        if (mutations.every((m) => inHeader(m.target))) return;
-        rescan();
-      });
-      observer.observe(root, { childList: true, subtree: true });
-      observers.push(observer);
-    };
-
-    collectObserveRoots().forEach(attach);
-
-    // Watch for late-appearing content roots without observing whole body
-    const boot = new MutationObserver(() => {
-      collectObserveRoots().forEach((root) => {
-        if (root.__b2vObserved) return;
-        root.__b2vObserved = true;
-        attach(root);
-        rescan();
-      });
-    });
-    // Only watch direct children of #app / body for new major sections
-    const app = document.getElementById('app') || document.body;
-    if (app) {
-      boot.observe(app, { childList: true, subtree: false });
-      observers.push(boot);
-    }
-    return observers;
-  }
-
-  async function init() {
+  // BiliAnalysis-style init: fixed button immediately; delay cover scan so header can mount.
+  function init() {
     injectStyles();
     registerMenu();
+    ensureWatchPageButton();
 
-    // Critical: wait until Bilibili header micro-frontend mounts.
-    // Full-document MutationObserver previously emptied #biliMainHeader.
-    await waitForHeader(8000);
-    // Extra settle time after header appears
-    await new Promise((resolve) => window.setTimeout(resolve, 300));
-
-    const rescan = debounce(() => {
+    const rescan = debounce((mutations = []) => {
+      if (mutationsAreOurs(mutations)) return;
+      if (mutations.length && mutations.every((mutation) => inHeader(mutation.target))) return;
       scanCovers();
       ensureWatchPageButton();
-    }, 400);
+    }, 150);
 
-    scanCovers();
-    ensureWatchPageButton();
-    startObservers(rescan);
+    // Delay first cover scan — avoids blocking Bilibili header micro-frontend mount.
+    window.setTimeout(() => {
+      scanCovers();
+      ensureWatchPageButton();
+    }, 1000);
 
-    window.addEventListener('scroll', () => rescan(), { passive: true });
+    const observer = new MutationObserver(rescan);
+    const observeRoot = () => {
+      if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    };
+    if (document.body) {
+      observeRoot();
+    } else {
+      window.addEventListener('DOMContentLoaded', observeRoot, { once: true });
+    }
+
+    window.addEventListener('scroll', debounce(() => {
+      scanCovers();
+      ensureWatchPageButton();
+    }, 250), { passive: true });
 
     let lastHref = location.href;
     setInterval(() => {
       if (location.href !== lastHref) {
         lastHref = location.href;
-        waitForHeader(5000).then(() => {
-          window.setTimeout(() => rescan(), 300);
-        });
+        ensureWatchPageButton();
+        window.setTimeout(() => {
+          scanCovers();
+          ensureWatchPageButton();
+        }, 300);
       }
-    }, 1000);
+    }, 800);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      void init();
-    }, { once: true });
+    document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
-    void init();
+    init();
   }
 })();

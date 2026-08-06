@@ -78,7 +78,32 @@ export function sortCodecFamilies(families: string[]): string[] {
   })
 }
 
+export const PREFERRED_CODEC_STORAGE_KEY = 'bili2vrc_preferred_codec_family'
+
+export function readPreferredCodecFamily(): string | null {
+  try {
+    const value = localStorage.getItem(PREFERRED_CODEC_STORAGE_KEY)?.trim().toLowerCase()
+    if (!value) return null
+    if (CODEC_ORDER.includes(value) || value === 'other') return value
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function writePreferredCodecFamily(family: string): void {
+  const key = String(family || '').trim().toLowerCase()
+  if (!key) return
+  try {
+    localStorage.setItem(PREFERRED_CODEC_STORAGE_KEY, key)
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 export function pickDefaultCodecFamily(families: string[]): string {
+  const preferred = readPreferredCodecFamily()
+  if (preferred && families.includes(preferred)) return preferred
   if (families.includes(DEFAULT_CODEC_FAMILY)) return DEFAULT_CODEC_FAMILY
   for (const family of CODEC_ORDER) {
     if (families.includes(family)) return family
