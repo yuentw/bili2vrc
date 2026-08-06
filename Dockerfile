@@ -8,12 +8,14 @@ RUN bun run generate
 FROM python:3.14-slim-trixie
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=node:26-bookworm-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=mwader/static-ffmpeg:9.0 /ffmpeg /usr/local/bin/ffmpeg
+COPY --from=mwader/static-ffmpeg:9.0 /ffprobe /usr/local/bin/ffprobe
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ffmpeg \
         aria2 \
-        nodejs \
+        libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
