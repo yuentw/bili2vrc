@@ -3,21 +3,32 @@ import {
   codecFamilyLabel,
   formatFpsTable,
   formatSize,
-  getRetroCodecClass,
+  isHdrRange,
 } from '~/composables/useFormatUtils'
 
 useHead({
-  title: 'bili2vrchat - B站→VRChat 上傳工具',
+  title: 'bili2vrchat POS — B站→VRChat',
 })
 
 const app = reactive(useBili2Vrc())
 const cookieFileInput = ref<HTMLInputElement | null>(null)
 const previewVideo = ref<HTMLVideoElement | null>(null)
 const hideCookieWarning = ref(false)
+const clockText = ref('')
+
+let clockTimer: ReturnType<typeof setInterval> | null = null
+
+function updateClock() {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  clockText.value = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+}
 
 onMounted(() => {
   app.loadHwaccelStatus()
   app.updateCookieWarningForUrl(String(app.urlInput ?? ''))
+  updateClock()
+  clockTimer = setInterval(updateClock, 1000)
 
   const incomingUrl = new URL(window.location.href).searchParams.get('url')?.trim()
   if (incomingUrl) {
@@ -28,6 +39,10 @@ onMounted(() => {
     const next = cleaned.pathname + cleaned.search + cleaned.hash
     history.replaceState(null, '', next || '/retro')
   }
+})
+
+onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
 })
 
 function onCookieFileChange(event: Event) {
@@ -55,297 +70,199 @@ function onResultVideoLoad() {
 function copyRetroUrl() {
   app.copyUrl(true)
 }
+
+const catColorClass = computed(() => {
+  const map: Record<string, string> = {
+    av1: 'pos-btn-magenta',
+    vp9: 'pos-btn-green',
+    h264: 'pos-btn-blue',
+    h265: 'pos-btn-red',
+  }
+  return (family: string) => map[family] || 'pos-btn-blue'
+})
 </script>
 
 <template>
   <div class="retro-app">
     <div class="page-wrap">
-      <div class="xp-window">
-        <div class="titlebar">
-          <div class="titlebar-left">
-            <span class="titlebar-icon">🎬</span>
-            bili2vrchat — B站→Cloudflare R2→VRChat 上傳工具
+      <div class="pos-shell">
+        <header class="pos-header">
+          <div class="pos-header-title">
+            <span class="pos-brand">bili2vrc</span>
+            — B站 / YouTube → R2 → VRChat
           </div>
-          <div class="win-controls">
-            <div class="wc-btn">0</div>
-            <div class="wc-btn">1</div>
-            <div class="wc-btn close">r</div>
+          <div class="pos-header-meta">
+            <span>{{ app.statusBarMsg }}</span>
+            <span class="pos-clock">{{ clockText }}</span>
+            <NuxtLink to="/" class="pos-theme-link">現代版</NuxtLink>
           </div>
-        </div>
+        </header>
 
-        <div class="menubar">
-          <div class="menu-item">檔案(F)</div>
-          <div class="menu-item">檢視(V)</div>
-          <div class="menu-item">工具(T)</div>
-          <div class="menu-item">說明(H)</div>
-        </div>
-
-        <div class="toolbar">
-          <button
-            class="xp-btn-primary xp-btn"
-            :disabled="app.fetchLoading"
-            @click="app.fetchFormats(true)"
-          >
-            {{ app.fetchLoading ? '載入中...' : '🔍 獲取格式(G)' }}
-          </button>
-          <div class="tb-sep" />
-          <button
-            class="xp-btn-primary xp-btn"
-            :disabled="!app.selectedFormat || app.processLoading"
-            @click="app.startProcess(true)"
-          >
-            ▶ 下載並上傳(U)
-          </button>
-          <button
-            v-if="app.showCancelBtn"
-            class="xp-btn xp-btn"
-            :disabled="app.cancelBtnDisabled"
-            @click="app.cancelProcess(true)"
-          >
-            ✕ 取消
-          </button>
-          <div class="tb-sep" />
-          <span id="selInfo" style="font-size:11px;color:#404040;flex:1">{{ app.selInfoText }}</span>
-        </div>
-
-        <div class="addrbar">
-          <span class="addr-label">網址(D):</span>
-          <input
-            class="addr-input"
-            type="text"
-            v-model="app.urlInput"
-            placeholder="bilibili.com/video/... 或 youtube.com/watch?v=..."
-            autocomplete="off"
-            spellcheck="false"
-            @input="app.onUrlInput(app.urlInput)"
-            @keydown="onUrlKeydown"
-          >
-          <button class="addr-go" @click="app.fetchFormats(true)">移至</button>
-        </div>
-
-        <div
-          v-if="app.showCookieWarning && !hideCookieWarning"
-          class="ie-infobar"
-          id="cookieWarning"
-          style="display: flex"
-        >
-          <span>{{ app.cookieWarningText }}</span>
-          <button class="ie-infobar-btn" @click="hideCookieWarning = true">關閉(X)</button>
-        </div>
-
-        <div class="marquee-strip">
-          <marquee behavior="scroll" direction="left" scrollamount="3">
-            ★★★ B站→VRChat 影片中轉工具 ★ 請在上方輸入網址並點擊「獲取格式」★ 建議選擇 H.264 格式以獲最佳 VRChat 相容性 ★ 上傳後連結可直接貼入 VRChat 影片播放器使用 ★★★
-          </marquee>
-        </div>
-
-        <div class="xp-body">
-          <div class="xp-panel" style="margin-bottom:8px">
-            <div class="xp-panel-title">🍪 Cookie（儲存於瀏覽器）</div>
-            <div class="cookie-panel-body">
-              <input
-                ref="cookieFileInput"
-                class="file-input-hidden"
-                type="file"
-                accept=".txt,text/plain"
-                @change="onCookieFileChange"
+        <div class="pos-main">
+          <!-- Left: check / settings -->
+          <aside class="pos-col pos-col-left">
+            <div class="pos-col-head">CHECK / 設定</div>
+            <div class="pos-col-body">
+              <div
+                v-if="app.showCookieWarning && !hideCookieWarning"
+                class="pos-warn-bar"
               >
-              <button
-                class="xp-btn cookie-file-picker"
-                type="button"
-                @click="cookieFileInput?.click()"
-              >
-                選擇 cookies.txt 檔案
-              </button>
-              <div id="cookiePlatforms">
-                <div
-                  v-for="platform in app.COOKIE_PLATFORMS"
-                  :key="platform"
-                  :class="app.cookieStatus[platform] ? 'ok' : 'warn'"
+                <span>{{ app.cookieWarningText }}</span>
+                <button type="button" class="pos-btn" @click="hideCookieWarning = true">關閉</button>
+              </div>
+
+              <section class="pos-section">
+                <div class="pos-section-title">1. 網址</div>
+                <div class="pos-url-row">
+                  <input
+                    id="posUrl"
+                    class="pos-input"
+                    type="text"
+                    v-model="app.urlInput"
+                    placeholder="bilibili.com/... 或 youtube.com/..."
+                    autocomplete="off"
+                    spellcheck="false"
+                    @input="app.onUrlInput(app.urlInput)"
+                    @keydown="onUrlKeydown"
+                  >
+                </div>
+              </section>
+
+              <section class="pos-section">
+                <div class="pos-section-title">2. Cookie</div>
+                <input
+                  ref="cookieFileInput"
+                  class="file-input-hidden"
+                  type="file"
+                  accept=".txt,text/plain"
+                  @change="onCookieFileChange"
                 >
-                  {{ app.platformLabel(platform) }}:
-                  {{ app.cookieStatus[platform] ? '已設定' : '未設定' }}
-                  <button
-                    v-if="app.cookieStatus[platform]"
-                    class="xp-btn"
-                    type="button"
-                    style="font-size:10px;padding:1px 6px"
-                    @click="app.clearCookiePlatform(platform, true)"
+                <button
+                  class="pos-btn pos-btn-blue pos-btn-block"
+                  type="button"
+                  @click="cookieFileInput?.click()"
+                >
+                  Cookie 檔案
+                </button>
+                <div class="pos-cookie-list">
+                  <div
+                    v-for="platform in app.COOKIE_PLATFORMS"
+                    :key="platform"
+                    class="pos-cookie-row"
+                    :class="app.cookieStatus[platform] ? 'ok' : 'warn'"
                   >
-                    清除
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div v-if="app.cookieUploadMsg" id="cookieUploadMsg" style="padding:0 8px 6px">
-              {{ app.cookieUploadMsg }}
-            </div>
-          </div>
-
-          <div v-if="app.showVideoMeta" id="videoMeta" style="display: block">
-            <div class="video-meta-inner">
-              <img
-                v-if="app.videoMeta?.thumbnail"
-                id="videoThumb"
-                :src="app.videoMeta.thumbnail"
-                :alt="app.videoMeta.title || '影片縮圖'"
-                referrerpolicy="no-referrer"
-              >
-              <div class="video-meta-text">
-                <div id="videoTitle">{{ app.videoMeta?.title }}</div>
-                <div class="video-meta-sub">
-                  <div v-if="app.videoMeta?.uploader" id="videoUploader">
-                    UP主：{{ app.videoMeta.uploader }}
-                  </div>
-                  <div v-if="app.videoMeta?.duration_formatted" id="videoDuration">
-                    時長：{{ app.videoMeta.duration_formatted }}
+                    <span>
+                      {{ app.platformLabel(platform) }}:
+                      {{ app.cookieStatus[platform] ? '已設定' : '未設定' }}
+                    </span>
+                    <button
+                      v-if="app.cookieStatus[platform]"
+                      class="pos-btn pos-btn-tiny"
+                      type="button"
+                      @click="app.clearCookiePlatform(platform, true)"
+                    >
+                      清除
+                    </button>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
+                <div v-if="app.cookieUploadMsg" class="pos-hint">{{ app.cookieUploadMsg }}</div>
+              </section>
 
-          <div class="xp-panel">
-            <div class="xp-panel-title">
-              <span>📋 格式列表
-                <span id="fmtCount" style="font-weight:normal;font-size:10px">{{ app.retroFmtCountLabel }}</span>
-              </span>
-              <div class="codec-filter-group retro-codec-filter">
-                <span class="codec-filter-label">編碼:</span>
-                <div class="codec-btn-group" role="group" aria-label="編碼篩選">
-                  <button
-                    v-for="family in app.codecFamilies"
-                    :key="family"
-                    type="button"
-                    class="xp-btn codec-btn"
-                    :class="{ active: app.codecFamily === family }"
-                    :disabled="app.codecFamilies.length <= 1"
-                    @click="app.setCodecFamily(family)"
+              <section v-if="app.showVideoMeta" class="pos-section">
+                <div class="pos-section-title">影片資訊</div>
+                <div class="pos-meta">
+                  <img
+                    v-if="app.videoMeta?.thumbnail"
+                    :src="app.videoMeta.thumbnail"
+                    :alt="app.videoMeta.title || '縮圖'"
+                    referrerpolicy="no-referrer"
                   >
-                    {{ codecFamilyLabel(family) }}
-                  </button>
+                  <div>
+                    <div class="pos-meta-title">{{ app.videoMeta?.title }}</div>
+                    <div class="pos-meta-sub">
+                      <div v-if="app.videoMeta?.uploader">UP：{{ app.videoMeta.uploader }}</div>
+                      <div v-if="app.videoMeta?.duration_formatted">時長：{{ app.videoMeta.duration_formatted }}</div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div style="overflow-x:auto;border-top:1px solid #aca899">
-              <table class="xp-listview" id="fmtTable">
-                <thead>
-                  <tr>
-                    <th style="width:120px">解析度</th>
-                    <th style="width:60px">範圍</th>
-                    <th style="width:90px">FPS</th>
-                    <th style="width:110px">編碼</th>
-                    <th class="right" style="width:90px">大小</th>
-                  </tr>
-                </thead>
-                <tbody id="fmtBody">
-                  <tr v-if="app.fmtTableMessage">
-                    <td colspan="5" class="empty-hint" :style="app.fmtTableError ? 'color:red' : ''">
-                      {{ app.fmtTableMessage }}
-                    </td>
-                  </tr>
-                  <tr
-                    v-for="(format, index) in app.filteredFormats"
-                    :key="format.format_id"
-                    :class="{ selected: app.selectedIdx === index }"
-                    @click="app.selectFormat(index)"
+              </section>
+
+              <section class="pos-section">
+                <div class="pos-section-title">3. 已選項目</div>
+                <div class="pos-check-lines">
+                  <div class="pos-check-line selected-row">
+                    <span>{{ app.selInfoText }}</span>
+                  </div>
+                  <div class="pos-check-line">
+                    <span>格式數</span>
+                    <span class="pos-muted">{{ app.retroFmtCountLabel }}</span>
+                  </div>
+                  <div class="pos-check-line">
+                    <span>狀態</span>
+                    <span class="pos-muted">{{ app.cookiePanelText }}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="pos-section">
+                <div class="pos-section-title">4. 上傳設定</div>
+                <div class="pos-field">
+                  <label class="pos-label" for="keyPhrase">自訂路徑</label>
+                  <input
+                    id="keyPhrase"
+                    class="pos-input"
+                    type="text"
+                    v-model="app.keyPhrase"
+                    placeholder="留空自動隨機"
+                    autocomplete="off"
                   >
-                    <td>{{ format.resolution }}</td>
-                    <td>{{ format.dynamic_range || 'SDR' }}</td>
-                    <td>{{ formatFpsTable(format.fps) }}</td>
-                    <td>
-                      <span class="codec-tag" :class="getRetroCodecClass(format.codec)">
-                        {{ format.codec }}
-                      </span>
-                    </td>
-                    <td class="right">{{ formatSize(format) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <hr class="xp-hr">
-
-          <div class="xp-panel">
-            <div class="xp-panel-title">⚙ 上傳設定</div>
-            <div style="padding:8px">
-              <div class="field-row">
-                <div class="field-col">
-                  <label class="xp-label" for="keyPhrase">自訂路徑名稱 (留空則自動隨機產生):</label>
-                  <input class="xp-input" type="text" id="keyPhrase" v-model="app.keyPhrase" placeholder="例如: myvideo" autocomplete="off">
                 </div>
-                <div class="field-col">
-                  <label class="xp-label" for="ttlSelect">檔案保存時間:</label>
-                  <select class="xp-select" id="ttlSelect" v-model="app.ttl">
-                    <option :value="3600">1 小時後自動刪除</option>
-                    <option :value="86400">1 天後自動刪除</option>
-                    <option :value="604800">7 天後自動刪除</option>
-                    <option :value="2592000">30 天後自動刪除</option>
-                    <option :value="0">永久保存</option>
+                <div class="pos-field">
+                  <label class="pos-label" for="ttlSelect">保存時間</label>
+                  <select id="ttlSelect" class="pos-select" v-model="app.ttl">
+                    <option :value="3600">1 小時</option>
+                    <option :value="86400">1 天</option>
+                    <option :value="604800">7 天</option>
+                    <option :value="2592000">30 天</option>
+                    <option :value="0">永久</option>
                   </select>
                 </div>
-              </div>
-              <div class="field-row">
-                <div class="field-col">
-                  <label class="xp-label" for="playbackSpeed">播放速度（上傳前永久變更）:</label>
+                <div class="pos-field">
+                  <label class="pos-label" for="playbackSpeed">播放速度</label>
                   <select
-                    class="xp-select"
                     id="playbackSpeed"
+                    class="pos-select"
                     :value="app.playbackSpeed"
                     @change="app.playbackSpeed = Number(($event.target as HTMLSelectElement).value)"
                   >
-                    <option :value="0.5">0.5x（慢速）</option>
+                    <option :value="0.5">0.5x</option>
                     <option :value="0.75">0.75x</option>
-                    <option :value="1">1.0x（原速）</option>
+                    <option :value="1">1.0x</option>
                     <option :value="1.25">1.25x</option>
                     <option :value="1.5">1.5x</option>
                     <option :value="1.75">1.75x</option>
-                    <option :value="2">2.0x（快速）</option>
+                    <option :value="2">2.0x</option>
                   </select>
                   <div
-                    class="xp-hint"
-                    :class="{ 'xp-hint-warn': app.playbackSpeedForcesReencode }"
+                    class="pos-hint"
+                    :class="{ 'pos-hint-warn': app.playbackSpeedForcesReencode }"
                   >
                     {{ app.playbackSpeedReencodeWarning }}
                   </div>
                 </div>
-              </div>
-              <div class="field-row">
-                <div class="field-col field-col-full">
-                  <label class="xp-label">輸出模式:</label>
-                  <div class="codec-btn-group output-mode-group" role="group" aria-label="輸出模式">
-                    <button
-                      v-for="option in app.outputModeOptions"
-                      :key="option.value"
-                      type="button"
-                      class="xp-btn codec-btn"
-                      :class="{ active: app.outputMode === option.value }"
-                      :disabled="option.value === 'original' && app.originalModeDisabled"
-                      @click="app.setOutputMode(option.value)"
-                    >
-                      {{ option.label }}
-                    </button>
-                  </div>
-                  <div class="xp-hint">{{ app.outputModeHint }}</div>
-                </div>
-              </div>
-              <div v-if="app.selectedIsHdr" class="field-row">
-                <div class="field-col field-col-full">
-                  <label class="xp-check-label">
-                    <input type="checkbox" v-model="app.tonemapHdr">
-                    <span>HDR → SDR（tonemap）</span>
-                  </label>
-                  <div class="xp-hint">{{ app.tonemapHdrHint }}</div>
-                </div>
-              </div>
+                <label v-if="app.selectedIsHdr" class="pos-check-label">
+                  <input type="checkbox" v-model="app.tonemapHdr">
+                  <span>HDR → SDR</span>
+                </label>
+                <div v-if="app.selectedIsHdr" class="pos-hint">{{ app.tonemapHdrHint }}</div>
+              </section>
 
-              <details v-if="app.showAdvancedEncoding" class="xp-advanced-options">
-                <summary class="xp-advanced-summary">進階編碼選項</summary>
-                <div class="field-row">
-                  <div class="field-col">
-                    <label class="xp-label" for="encodeMode">編碼模式（重新編碼時）:</label>
-                    <select class="xp-select" id="encodeMode" v-model="app.encodeMode">
+              <section v-if="app.showAdvancedEncoding" class="pos-section">
+                <details class="pos-advanced">
+                  <summary>進階編碼</summary>
+                  <div class="pos-field">
+                    <label class="pos-label" for="encodeMode">編碼模式</label>
+                    <select id="encodeMode" class="pos-select" v-model="app.encodeMode">
                       <option
                         v-for="option in app.encodeModeOptions"
                         :key="option.value"
@@ -355,11 +272,11 @@ function copyRetroUrl() {
                       </option>
                     </select>
                   </div>
-                  <div v-if="app.selectedIsHdr" class="field-col">
-                    <label class="xp-label" for="tonemapAlgorithm">Mapping（HDR→SDR）:</label>
+                  <div v-if="app.selectedIsHdr" class="pos-field">
+                    <label class="pos-label" for="tonemapAlgorithm">Mapping</label>
                     <select
-                      class="xp-select"
                       id="tonemapAlgorithm"
+                      class="pos-select"
                       v-model="app.tonemapAlgorithm"
                       :disabled="!app.tonemapHdr"
                     >
@@ -371,17 +288,17 @@ function copyRetroUrl() {
                         {{ option.label }}
                       </option>
                     </select>
-                    <div class="xp-hint">{{ app.tonemapAlgorithmHint }}</div>
+                    <div class="pos-hint">{{ app.tonemapAlgorithmHint }}</div>
                   </div>
-                  <div class="field-col">
-                    <label class="xp-label crf-label-row" for="encodeCrf">
+                  <div class="pos-field">
+                    <label class="pos-label crf-label-row" for="encodeCrf">
                       <span>{{ app.encodeCrfLabel }}</span>
                       <span class="crf-value">{{ app.encodeCrf }}</span>
                     </label>
                     <input
+                      id="encodeCrf"
                       class="crf-slider"
                       type="range"
-                      id="encodeCrf"
                       v-model.number="app.encodeCrf"
                       :min="app.encodeCrfConfig.min"
                       :max="app.encodeCrfConfig.max"
@@ -391,13 +308,10 @@ function copyRetroUrl() {
                       <span>{{ app.crfRangeLabels.low }}</span>
                       <span>{{ app.crfRangeLabels.high }}</span>
                     </div>
-                    <div class="xp-hint">{{ app.encodeCrfConfig.hint }}</div>
                   </div>
-                </div>
-                <div class="field-row">
-                  <div class="field-col">
-                    <label class="xp-label" for="bitrateKbps">{{ app.bitrateFieldLabel }}:</label>
-                    <select class="xp-select" id="bitrateKbps" v-model.number="app.bitrateKbps">
+                  <div class="pos-field">
+                    <label class="pos-label" for="bitrateKbps">{{ app.bitrateFieldLabel }}</label>
+                    <select id="bitrateKbps" class="pos-select" v-model.number="app.bitrateKbps">
                       <option
                         v-if="app.bitrateSelectOptions.source"
                         :value="app.bitrateSelectOptions.source"
@@ -412,142 +326,543 @@ function copyRetroUrl() {
                         {{ kbps }} kbps
                       </option>
                     </select>
-                    <div class="xp-hint">
+                    <div class="pos-hint">
                       {{ app.bitrateFieldHint }}
                       <template v-if="Number(app.playbackSpeed) !== 1 && app.scaleBitrateWithSpeed">
                         。倍速實際{{ app.encodeMode === 'cbr' ? '目標' : '上限' }}
-                        {{ app.bitrateCeilingKbps }} kbps（選取值 × {{ app.playbackSpeed }}x）
+                        {{ app.bitrateCeilingKbps }} kbps
                       </template>
                     </div>
                   </div>
-                </div>
-                <div id="hwEncoderLabel">{{ app.hwEncoderLabel }}</div>
-              </details>
-            </div>
-          </div>
+                  <div class="pos-hint">{{ app.hwEncoderLabel }}</div>
+                </details>
+              </section>
 
-          <div v-if="app.showProgressBar" class="xp-progress" id="progressBar" style="display: block">
-            <div class="xp-progress-fill" id="progressFill" />
-          </div>
-
-          <div v-if="app.showStatusBox" class="xp-status-text" id="statusBox" style="display: block">
-            <span id="statusMsg">{{ app.statusMsg }}</span>
-          </div>
-
-          <div v-if="app.showResultBox" class="xp-result" id="resultBox" style="display: block">
-            <div class="xp-result-title">✅ 上傳完成！VRChat 直連網址如下：</div>
-            <div class="xp-result-row">
-              <input class="xp-result-url" type="text" id="resultUrl" readonly :value="app.resultUrl">
-              <button class="xp-btn" id="copyBtn" @click="copyRetroUrl">{{ app.copyBtnText }}</button>
-            </div>
-            <video
-              ref="previewVideo"
-              id="previewVideo"
-              :key="app.resultUrl"
-              controls
-              playsinline
-              preload="metadata"
-              :src="app.resultUrl"
-              @loadeddata="onResultVideoLoad"
-            />
-            <div class="preview-speed">
-              <label for="previewSpeed">預覽速度</label>
-              <input
-                id="previewSpeed"
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.05"
-                :value="app.previewSpeed"
-                @input="onPreviewSpeedInput"
+              <section
+                v-if="app.showProgressBar || app.showStatusBox || app.showResultBox"
+                class="pos-section"
               >
-              <span id="previewSpeedLabel">{{ app.previewSpeed.toFixed(2) }}x</span>
+                <div class="pos-section-title">進度 / 結果</div>
+                <div v-if="app.showProgressBar" class="pos-progress">
+                  <div class="pos-progress-fill" />
+                </div>
+                <div v-if="app.showStatusBox" class="pos-status-box">
+                  {{ app.statusMsg }}
+                </div>
+                <div v-if="app.showResultBox" class="pos-result">
+                  <div class="pos-result-title">上傳完成 — VRChat 直連</div>
+                  <div class="pos-result-row">
+                    <input class="pos-result-url" type="text" readonly :value="app.resultUrl">
+                    <button type="button" class="pos-btn pos-btn-green" @click="copyRetroUrl">
+                      {{ app.copyBtnText }}
+                    </button>
+                  </div>
+                  <video
+                    ref="previewVideo"
+                    :key="app.resultUrl"
+                    controls
+                    playsinline
+                    preload="metadata"
+                    :src="app.resultUrl"
+                    @loadeddata="onResultVideoLoad"
+                  />
+                  <div class="preview-speed">
+                    <label for="previewSpeed">預覽</label>
+                    <input
+                      id="previewSpeed"
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.05"
+                      :value="app.previewSpeed"
+                      @input="onPreviewSpeedInput"
+                    >
+                    <span>{{ app.previewSpeed.toFixed(2) }}x</span>
+                  </div>
+                </div>
+              </section>
             </div>
-            <div class="xp-hint">
-              💡 在 VRChat 影片播放器中貼上此連結即可播放 &nbsp;|&nbsp; 連結有效期依上方設定而定
+          </aside>
+
+          <!-- Center: format item grid -->
+          <section class="pos-col pos-col-center">
+            <div class="pos-col-head">
+              格式選單
+              <span style="font-weight:normal;margin-left:6px">{{ app.retroFmtCountLabel }}</span>
             </div>
+            <div class="pos-items">
+              <div
+                v-if="app.fmtTableMessage"
+                class="pos-empty"
+                :class="{ error: app.fmtTableError }"
+              >
+                {{ app.fmtTableMessage }}
+              </div>
+              <button
+                v-for="(format, index) in app.filteredFormats"
+                :key="format.format_id"
+                type="button"
+                class="pos-btn pos-item"
+                :class="{ selected: app.selectedIdx === index }"
+                @click="app.selectFormat(index)"
+              >
+                <span class="pos-item-name">{{ format.resolution }}</span>
+                <span class="pos-item-sub">
+                  <span :class="{ 'pos-item-hdr': isHdrRange(format.dynamic_range) }">
+                    {{ format.dynamic_range || 'SDR' }}
+                  </span>
+                  · {{ formatFpsTable(format.fps) }}
+                  · {{ format.codec }}
+                </span>
+                <span class="pos-item-price">{{ formatSize(format) }}</span>
+              </button>
+            </div>
+          </section>
+
+          <!-- Right: categories -->
+          <aside class="pos-col pos-col-right">
+            <div class="pos-col-head">編碼分類</div>
+            <div class="pos-col-body">
+              <section class="pos-section">
+                <div class="pos-section-title">來源編碼</div>
+                <div class="pos-cats">
+                  <button
+                    v-for="family in app.codecFamilies"
+                    :key="family"
+                    type="button"
+                    class="pos-btn pos-cat"
+                    :class="[catColorClass(family), { active: app.codecFamily === family }]"
+                    :disabled="app.codecFamilies.length <= 1"
+                    @click="app.setCodecFamily(family)"
+                  >
+                    {{ codecFamilyLabel(family) }}
+                  </button>
+                  <div v-if="!app.codecFamilies.length" class="pos-hint" style="margin:6px">
+                    取得格式後顯示
+                  </div>
+                </div>
+              </section>
+
+              <section class="pos-section">
+                <div class="pos-section-title">輸出模式</div>
+                <div class="pos-cats">
+                  <button
+                    v-for="option in app.outputModeOptions"
+                    :key="option.value"
+                    type="button"
+                    class="pos-btn pos-cat"
+                    :class="{
+                      active: app.outputMode === option.value,
+                      'pos-btn-green': option.value === 'original',
+                      'pos-btn-magenta': option.value === 'av1',
+                      'pos-btn-blue': option.value === 'h264',
+                    }"
+                    :disabled="option.value === 'original' && app.originalModeDisabled"
+                    @click="app.setOutputMode(option.value)"
+                  >
+                    {{ option.label }}
+                  </button>
+                  <div class="pos-hint" style="margin:6px">{{ app.outputModeHint }}</div>
+                </div>
+              </section>
+            </div>
+          </aside>
+        </div>
+
+        <footer class="pos-footer">
+          <button
+            type="button"
+            class="pos-btn pos-btn-blue"
+            :disabled="app.fetchLoading"
+            @click="app.fetchFormats(true)"
+          >
+            {{ app.fetchLoading ? '載入中…' : '獲取格式' }}
+          </button>
+          <button
+            type="button"
+            class="pos-btn pos-btn-red"
+            :disabled="!app.selectedFormat || app.processLoading"
+            @click="app.startProcess(true)"
+          >
+            {{ app.processLoading ? '處理中…' : '下載並上傳' }}
+          </button>
+          <button
+            type="button"
+            class="pos-btn pos-btn-green"
+            :disabled="!app.showCancelBtn || app.cancelBtnDisabled"
+            @click="app.cancelProcess(true)"
+          >
+            取消
+          </button>
+          <div class="pos-footer-note">
+            先選右欄編碼 → 中欄解析度 → 左欄設定 → 下載並上傳
           </div>
-        </div>
-
-        <div class="statusbar">
-          <span class="sb-panel" id="statusPanel">{{ app.statusBarMsg }}</span>
-          <span class="sb-panel sb-fixed" style="width:140px" id="cookiePanel">{{ app.cookiePanelText }}</span>
-          <span class="sb-panel sb-fixed" style="width:70px">Port: 5000</span>
-        </div>
-      </div>
-
-      <div class="xp-window" style="font-size:11px">
-        <div class="titlebar">
-          <div class="titlebar-left"><span>🖥</span> 主題切換</div>
-        </div>
-        <div style="padding:4px 8px;background:#ece9d8;display:flex;gap:6px;align-items:center">
-          <NuxtLink to="/" class="xp-btn theme-btn">現代版</NuxtLink>
-          <button class="xp-btn" disabled style="font-weight:bold">Windows XP 版（目前）</button>
-        </div>
+        </footer>
       </div>
 
       <div class="page-footer">
-        此頁面最佳解析度：800×600 | 建議使用 Microsoft Internet Explorer 6.0 SP2 以上版本瀏覽<br>
-        bili2vrchat v1.0 &copy; 2003–2026 | B站→Cloudflare R2→VRChat
+        POS 復古介面 · bili2vrchat · B站→Cloudflare R2→VRChat
       </div>
     </div>
   </div>
 </template>
 
-<style src="~/assets/css/retro.css" />
+<style>
+@import "~/assets/css/retro.css";
 
-<style scoped>
-.retro-app :deep(.theme-btn) {
-  text-decoration: none;
-  color: #000;
-  display: inline-block;
+/* Force POS visual partitions (survives if src import is flaky) */
+.retro-app {
+  --pos-paper: #d4c4a8;
+  --pos-ink: #1a1208;
+  --pos-header: #8b1515;
+  --pos-accent-yellow: #ffe14a;
+  --pos-blue: #0a2f9e;
+  --pos-red: #b01010;
+  --pos-green: #0a6b1c;
+  --pos-magenta: #8b0a7a;
+  --pos-border: #3a3020;
+  --pos-bevel-light: #f4ebe0;
+  --pos-bevel-dark: #6a5a40;
+  --pos-btn-face: #e8dcc8;
+  --pos-panel: #dccdb4;
+  color: var(--pos-ink);
+  font-family: Tahoma, Verdana, "MS Sans Serif", Arial, sans-serif;
+  font-size: 12px;
+  background: #2a2218;
+  min-height: 100vh;
+  padding: 8px;
+  box-sizing: border-box;
 }
 
-.retro-app :deep(.retro-codec-filter) {
+.retro-app *,
+.retro-app *::before,
+.retro-app *::after {
+  box-sizing: border-box;
+}
+
+.retro-app .pos-shell {
+  background: var(--pos-paper) !important;
+  border: 2px solid var(--pos-border) !important;
+  box-shadow: 3px 3px 0 #1a1208;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-weight: normal;
-  font-size: 10px;
+  flex-direction: column;
+  min-height: calc(100vh - 40px);
 }
 
-.retro-app :deep(.retro-codec-filter .codec-btn-group) {
+.retro-app .pos-header {
+  background: var(--pos-header) !important;
+  color: #fff8e8 !important;
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border-bottom: 2px solid #4a0808;
 }
 
-.retro-app :deep(.retro-codec-filter .codec-btn) {
-  font-size: 10px;
-  padding: 2px 8px;
-  min-width: auto;
-  min-height: 22px;
-}
-
-.retro-app :deep(.retro-codec-filter .codec-btn.active) {
-  background: linear-gradient(to bottom, #4a8ed8 0%, #2b5db7 100%);
-  border-color: #fff #1a3a80 #1a3a80 #fff;
-  outline-color: #1a3a80;
-  color: white;
+.retro-app .pos-brand,
+.retro-app .pos-clock,
+.retro-app .pos-theme-link {
+  color: #ffe14a !important;
   font-weight: bold;
 }
 
-.retro-app :deep(.field-col-full) {
-  flex: 1 1 100%;
+.retro-app .pos-main {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  width: 100%;
+  flex: 1;
+  border-bottom: 2px solid var(--pos-border);
+}
+
+.retro-app .pos-col {
+  background: var(--pos-panel) !important;
+  border-right: 2px solid var(--pos-border) !important;
+  min-height: 420px;
+  max-height: calc(100vh - 140px);
+  overflow: auto;
+}
+
+.retro-app .pos-col-left {
+  flex: 0 0 30% !important;
+  max-width: 360px;
+  min-width: 240px;
+}
+
+.retro-app .pos-col-center {
+  flex: 1 1 auto !important;
+  min-width: 0;
+}
+
+.retro-app .pos-col-right {
+  flex: 0 0 168px !important;
+  min-width: 140px;
+  border-right: none !important;
+}
+
+.retro-app .pos-col-head {
+  background: #b8a888 !important;
+  border-bottom: 2px solid var(--pos-border) !important;
+  padding: 5px 8px;
+  font-weight: bold;
+  font-size: 12px;
+  color: var(--pos-ink);
+}
+
+.retro-app .pos-col-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.retro-app .pos-section {
+  border: 2px solid var(--pos-border) !important;
+  background: #efe4ce !important;
+  padding: 0;
+  margin: 0;
+}
+
+.retro-app .pos-section-title {
+  background: #c4b090 !important;
+  border-bottom: 1px solid var(--pos-border);
+  padding: 3px 8px;
+  font-weight: bold;
+  font-size: 11px;
+  color: var(--pos-ink);
+}
+
+.retro-app .pos-section > .pos-url-row,
+.retro-app .pos-section > .pos-field,
+.retro-app .pos-section > .pos-hint,
+.retro-app .pos-section > .pos-check-label,
+.retro-app .pos-section > .pos-btn,
+.retro-app .pos-section > .pos-cookie-list,
+.retro-app .pos-section > .pos-meta,
+.retro-app .pos-section > .pos-check-lines,
+.retro-app .pos-section > .pos-advanced,
+.retro-app .pos-section > .pos-progress,
+.retro-app .pos-section > .pos-status-box,
+.retro-app .pos-section > .pos-result {
+  margin: 6px;
+}
+
+.retro-app .pos-btn {
+  appearance: none;
+  background: var(--pos-btn-face) !important;
+  border: 2px solid !important;
+  border-color: var(--pos-bevel-light) var(--pos-bevel-dark) var(--pos-bevel-dark) var(--pos-bevel-light) !important;
+  color: var(--pos-ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 0 !important;
+}
+
+.retro-app .pos-btn:active:not(:disabled) {
+  border-color: var(--pos-bevel-dark) var(--pos-bevel-light) var(--pos-bevel-light) var(--pos-bevel-dark) !important;
+}
+
+.retro-app .pos-btn:disabled {
+  color: #777 !important;
+  cursor: default;
+}
+
+.retro-app .pos-btn-block { width: 100%; }
+.retro-app .pos-btn-tiny { font-size: 10px; padding: 2px 6px; }
+.retro-app .pos-btn-blue { color: var(--pos-blue) !important; }
+.retro-app .pos-btn-red { color: var(--pos-red) !important; }
+.retro-app .pos-btn-green { color: var(--pos-green) !important; }
+.retro-app .pos-btn-magenta { color: var(--pos-magenta) !important; }
+
+.retro-app .pos-btn.active,
+.retro-app .pos-cat.active,
+.retro-app .pos-item.selected {
+  background: var(--pos-accent-yellow) !important;
+  box-shadow: inset 0 0 0 2px var(--pos-border);
+}
+
+.retro-app .pos-input,
+.retro-app .pos-select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 4px;
+  border: 2px solid !important;
+  border-color: var(--pos-bevel-dark) var(--pos-bevel-light) var(--pos-bevel-light) var(--pos-bevel-dark) !important;
+  background: #fffef8 !important;
+  color: var(--pos-ink);
+  border-radius: 0 !important;
+}
+
+.retro-app .pos-label {
+  display: block;
+  font-size: 11px;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.retro-app .pos-hint {
+  font-size: 10px;
+  color: #5a4a30;
+  line-height: 1.35;
+}
+
+.retro-app .pos-hint-warn {
+  color: var(--pos-red) !important;
+  font-weight: bold;
+}
+
+.retro-app .pos-check-lines {
+  border: 1px solid var(--pos-border);
+  background: #fff8e8;
+}
+
+.retro-app .pos-check-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px dotted #a89878;
+  font-size: 11px;
+  color: var(--pos-blue);
+}
+
+.retro-app .pos-check-line:last-child { border-bottom: none; }
+
+.retro-app .pos-check-line.selected-row {
+  background: var(--pos-accent-yellow) !important;
+  color: var(--pos-ink) !important;
+  font-weight: bold;
+}
+
+.retro-app .pos-cookie-list {
+  margin: 6px;
+}
+
+.retro-app .pos-cookie-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.retro-app .pos-cookie-row.ok { color: var(--pos-green); }
+.retro-app .pos-cookie-row.warn { color: var(--pos-red); }
+
+.retro-app .pos-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 6px;
+  padding: 8px;
+}
+
+.retro-app .pos-item {
+  position: relative;
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 6px 18px;
+  color: var(--pos-blue) !important;
+}
+
+.retro-app .pos-item-price {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  font-size: 10px;
+  color: var(--pos-ink);
+}
+
+.retro-app .pos-empty {
+  grid-column: 1 / -1;
+  padding: 24px 12px;
+  text-align: center;
+  border: 2px dashed var(--pos-border);
+  background: #efe4ce;
+  color: #5a4a30;
+}
+
+.retro-app .pos-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+
+.retro-app .pos-cat {
+  min-height: 44px;
   width: 100%;
 }
 
-.retro-app :deep(.output-mode-group) {
-  display: flex;
-  gap: 2px;
+.retro-app .pos-cat-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 2px solid var(--pos-border);
 }
 
-.retro-app :deep(.output-mode-group .codec-btn) {
-  flex: 1;
-  min-width: 0;
+.retro-app .pos-cat-label {
   font-size: 10px;
-  padding: 2px 6px;
-  min-height: 22px;
+  font-weight: bold;
+  margin-bottom: 4px;
+  color: #5a4a30;
+}
+
+.retro-app .pos-footer {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 8px;
+  background: #c8b898 !important;
+  border-top: 2px solid var(--pos-bevel-light);
+}
+
+.retro-app .pos-footer .pos-btn {
+  min-height: 48px;
+  font-size: 14px;
+}
+
+.retro-app .pos-footer-note {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 10px;
+  color: #5a4a30;
+}
+
+.retro-app .page-footer {
+  text-align: center;
+  color: #c8b090;
+  font-size: 10px;
+  margin-top: 8px;
+}
+
+.retro-app .file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .retro-app .pos-main {
+    flex-direction: column !important;
+  }
+
+  .retro-app .pos-col-left,
+  .retro-app .pos-col-center,
+  .retro-app .pos-col-right {
+    flex: 1 1 auto !important;
+    max-width: none !important;
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 2px solid var(--pos-border);
+  }
 }
 </style>
