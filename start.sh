@@ -94,6 +94,19 @@ ensure_frontend() {
 }
 
 ensure_uv
+update_ytdlp() {
+  echo "[bili2vrchat] 正在檢查 yt-dlp ..."
+  if uv lock --upgrade-package yt-dlp && uv sync; then
+    local version
+    version="$(uv run --no-sync yt-dlp --version 2>/dev/null || true)"
+    if [[ -n "$version" ]]; then
+      echo "[bili2vrchat] yt-dlp ${version}"
+    fi
+  else
+    echo "[bili2vrchat] yt-dlp 更新失敗，沿用現有版本。"
+  fi
+}
+update_ytdlp
 ensure_bun
 ensure_frontend
 

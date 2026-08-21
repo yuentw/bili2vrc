@@ -7,6 +7,8 @@ echo [bili2vrchat] Starting...
 call :ensure_uv
 if errorlevel 1 goto :end_error
 
+call :update_ytdlp
+
 call :ensure_bun
 if errorlevel 1 goto :end_error
 
@@ -59,6 +61,21 @@ if errorlevel 1 (
   exit /b 1
 )
 echo [bili2vrchat] uv installed.
+exit /b 0
+
+:update_ytdlp
+echo [bili2vrchat] Checking yt-dlp ...
+uv lock --upgrade-package yt-dlp
+if errorlevel 1 (
+  echo [bili2vrchat] yt-dlp update skipped. Using existing version.
+  exit /b 0
+)
+uv sync
+if errorlevel 1 (
+  echo [bili2vrchat] yt-dlp sync skipped. Using existing version.
+  exit /b 0
+)
+for /f "delims=" %%v in ('uv run --no-sync yt-dlp --version 2^>nul') do echo [bili2vrchat] yt-dlp %%v
 exit /b 0
 
 :ensure_bun
