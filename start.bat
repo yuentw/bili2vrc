@@ -7,6 +7,9 @@ echo [bili2vrchat] Starting...
 call :ensure_uv
 if errorlevel 1 goto :end_error
 
+call :ensure_ffmpeg
+if errorlevel 1 goto :end_error
+
 call :update_ytdlp
 
 call :ensure_bun
@@ -61,6 +64,64 @@ if errorlevel 1 (
   exit /b 1
 )
 echo [bili2vrchat] uv installed.
+exit /b 0
+
+:ensure_ffmpeg
+where ffmpeg >nul 2>&1
+if not errorlevel 1 (
+  where ffprobe >nul 2>&1
+  if not errorlevel 1 exit /b 0
+)
+
+if exist "%~dp0.ffmpeg\bin\ffmpeg.exe" (
+  set "PATH=%~dp0.ffmpeg\bin;%PATH%"
+  where ffmpeg >nul 2>&1
+  if not errorlevel 1 (
+    where ffprobe >nul 2>&1
+    if not errorlevel 1 exit /b 0
+  )
+)
+
+echo [bili2vrchat] ffmpeg not found. Installing with winget ...
+where winget >nul 2>&1
+if not errorlevel 1 (
+  winget install --id Gyan.FFmpeg --exact --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+  if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" (
+    set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+  )
+  for /d %%i in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*") do (
+    for /d %%j in ("%%i\ffmpeg-*") do (
+      if exist "%%j\bin\ffmpeg.exe" set "PATH=%%j\bin;%PATH%"
+    )
+  )
+  where ffmpeg >nul 2>&1
+  if not errorlevel 1 (
+    where ffprobe >nul 2>&1
+    if not errorlevel 1 (
+      echo [bili2vrchat] ffmpeg installed.
+      exit /b 0
+    )
+  )
+)
+
+echo [bili2vrchat] winget unavailable or failed. Installing into .ffmpeg ...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $root=(Get-Location).Path; $asset=if($env:PROCESSOR_ARCHITECTURE -eq 'ARM64'){'ffmpeg-master-latest-winarm64-gpl.zip'}else{'ffmpeg-master-latest-win64-gpl.zip'}; $zip=Join-Path $root '.ffmpeg-download.zip'; $ex=Join-Path $root '.ffmpeg-extract'; $bin=Join-Path $root '.ffmpeg\bin'; curl.exe -fL --retry 3 -o $zip ('https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/' + $asset); if($LASTEXITCODE -ne 0){throw 'download failed'}; if(Test-Path $ex){Remove-Item $ex -Recurse -Force}; New-Item -ItemType Directory -Path $ex -Force | Out-Null; tar.exe -xf $zip -C $ex; if($LASTEXITCODE -ne 0){throw 'extract failed'}; $ff=(Get-ChildItem $ex -Recurse -Filter ffmpeg.exe | Select-Object -First 1); if(-not $ff){throw 'ffmpeg.exe missing'}; if(Test-Path (Join-Path $root '.ffmpeg')){Remove-Item (Join-Path $root '.ffmpeg') -Recurse -Force}; New-Item -ItemType Directory -Path $bin -Force | Out-Null; Copy-Item (Join-Path $ff.DirectoryName '*') $bin -Force; Remove-Item $zip -Force; Remove-Item $ex -Recurse -Force"
+if errorlevel 1 (
+  echo [bili2vrchat] Failed to install ffmpeg.
+  echo   Manual install: winget install --id Gyan.FFmpeg --exact
+  echo   Or: https://ffmpeg.org/download.html
+  exit /b 1
+)
+
+if not exist "%~dp0.ffmpeg\bin\ffmpeg.exe" (
+  echo [bili2vrchat] ffmpeg still not found after install.
+  echo   Manual install: winget install --id Gyan.FFmpeg --exact
+  echo   Or: https://ffmpeg.org/download.html
+  exit /b 1
+)
+
+set "PATH=%~dp0.ffmpeg\bin;%PATH%"
+echo [bili2vrchat] ffmpeg installed.
 exit /b 0
 
 :update_ytdlp

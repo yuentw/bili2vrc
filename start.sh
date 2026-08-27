@@ -43,6 +43,95 @@ ensure_uv() {
   echo "[bili2vrchat] uv 已安裝。"
 }
 
+ffmpeg_available() {
+  command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1
+}
+
+ensure_ffmpeg() {
+  if ffmpeg_available; then
+    return 0
+  fi
+
+  if [[ -x "$ROOT/.ffmpeg/bin/ffmpeg" && -x "$ROOT/.ffmpeg/bin/ffprobe" ]]; then
+    export PATH="$ROOT/.ffmpeg/bin:$PATH"
+    return 0
+  fi
+
+  echo "[bili2vrchat] 未找到 ffmpeg，正在安裝到 .ffmpeg ..."
+
+  local os arch url
+  os="$(uname -s)"
+  arch="$(uname -m)"
+
+  if [[ "$os" == "Darwin" ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew install ffmpeg
+      if ffmpeg_available; then
+        echo "[bili2vrchat] ffmpeg 已安裝。"
+        return 0
+      fi
+    fi
+    echo "[bili2vrchat] 無法自動安裝 ffmpeg。請執行：brew install ffmpeg" >&2
+    echo "  手動安裝：https://ffmpeg.org/download.html" >&2
+    exit 1
+  fi
+
+  case "$arch" in
+    x86_64|amd64)
+      url="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+      ;;
+    aarch64|arm64)
+      url="https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz"
+      ;;
+    *)
+      echo "[bili2vrchat] 不支援的架構：${arch}。請手動安裝 ffmpeg。" >&2
+      echo "  手動安裝：https://ffmpeg.org/download.html" >&2
+      exit 1
+      ;;
+  esac
+
+  local archive="$ROOT/.ffmpeg-download.tar.xz"
+  local extract="$ROOT/.ffmpeg-extract"
+  rm -f "$archive"
+  rm -rf "$extract"
+  mkdir -p "$extract"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL --retry 3 -o "$archive" "$url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$archive" "$url"
+  else
+    echo "[bili2vrchat] 無法安裝 ffmpeg：需要 curl 或 wget。" >&2
+    echo "  手動安裝：https://ffmpeg.org/download.html" >&2
+    exit 1
+  fi
+
+  tar -xf "$archive" -C "$extract"
+
+  local ffmpeg_bin
+  ffmpeg_bin="$(find "$extract" -type f -name ffmpeg -print -quit)"
+  if [[ -z "$ffmpeg_bin" ]]; then
+    echo "[bili2vrchat] 下載的壓縮檔中找不到 ffmpeg。" >&2
+    exit 1
+  fi
+
+  rm -rf "$ROOT/.ffmpeg"
+  mkdir -p "$ROOT/.ffmpeg/bin"
+  cp -a "$(dirname "$ffmpeg_bin")/." "$ROOT/.ffmpeg/bin/"
+  chmod +x "$ROOT/.ffmpeg/bin/ffmpeg" "$ROOT/.ffmpeg/bin/ffprobe"
+  export PATH="$ROOT/.ffmpeg/bin:$PATH"
+
+  rm -f "$archive"
+  rm -rf "$extract"
+
+  if ! ffmpeg_available; then
+    echo "[bili2vrchat] 安裝後仍找不到 ffmpeg。" >&2
+    echo "  手動安裝：https://ffmpeg.org/download.html" >&2
+    exit 1
+  fi
+  echo "[bili2vrchat] ffmpeg 已安裝。"
+}
+
 ensure_bun() {
   if command -v bun >/dev/null 2>&1; then
     export PATH="$ROOT/.bun/bin:$PATH"
@@ -94,6 +183,7 @@ ensure_frontend() {
 }
 
 ensure_uv
+ensure_ffmpeg
 update_ytdlp() {
   echo "[bili2vrchat] 正在檢查 yt-dlp ..."
   if uv lock --upgrade-package yt-dlp && uv sync; then

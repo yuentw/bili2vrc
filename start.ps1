@@ -71,6 +71,120 @@ function Update-Ytdlp {
     }
 }
 
+function Test-FfmpegAvailable {
+    return [bool](Get-Command ffmpeg -ErrorAction SilentlyContinue) -and
+        [bool](Get-Command ffprobe -ErrorAction SilentlyContinue)
+}
+
+function Add-WingetFfmpegToPath {
+    $links = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+    if (Test-Path (Join-Path $links 'ffmpeg.exe')) {
+        Add-ToPath $links
+    }
+
+    $packages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+    if (Test-Path $packages) {
+        $ffmpegExe = Get-ChildItem -Path $packages -Directory -Filter 'Gyan.FFmpeg*' -ErrorAction SilentlyContinue |
+            ForEach-Object { Get-ChildItem $_.FullName -Filter ffmpeg.exe -Recurse -ErrorAction SilentlyContinue } |
+            Select-Object -First 1
+        if ($ffmpegExe) {
+            Add-ToPath $ffmpegExe.DirectoryName
+        }
+    }
+}
+
+function Ensure-Ffmpeg {
+    if (Test-FfmpegAvailable) {
+        return
+    }
+
+    $localBin = Join-Path $Root '.ffmpeg\bin'
+    if (Test-Path (Join-Path $localBin 'ffmpeg.exe')) {
+        Add-ToPath $localBin
+        if (Test-FfmpegAvailable) {
+            return
+        }
+    }
+
+    Add-WingetFfmpegToPath
+    if (Test-FfmpegAvailable) {
+        return
+    }
+
+    $wingetOk = $false
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host '[bili2vrchat] 未找到 ffmpeg，正在用 winget 安裝 ...'
+        & winget install --id Gyan.FFmpeg --exact --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        if ($userPath) { $env:PATH = "$userPath;$env:PATH" }
+        if ($machinePath) { $env:PATH = "$env:PATH;$machinePath" }
+        Add-WingetFfmpegToPath
+        $wingetOk = Test-FfmpegAvailable
+    }
+
+    if (-not $wingetOk) {
+        Write-Host '[bili2vrchat] 改為安裝到 .ffmpeg ...'
+        $asset = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
+            'ffmpeg-master-latest-winarm64-gpl.zip'
+        } else {
+            'ffmpeg-master-latest-win64-gpl.zip'
+        }
+        $zipUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$asset"
+        $zipPath = Join-Path $Root '.ffmpeg-download.zip'
+        $extractDir = Join-Path $Root '.ffmpeg-extract'
+        $localRoot = Join-Path $Root '.ffmpeg'
+
+        try {
+            if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+            if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+
+            if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+                & curl.exe -fL --retry 3 -o $zipPath $zipUrl
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "[bili2vrchat] 下載 ffmpeg 失敗。`n  手動安裝：winget install --id Gyan.FFmpeg --exact"
+                }
+            } else {
+                Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+            }
+
+            New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+            if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
+                & tar.exe -xf $zipPath -C $extractDir
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error '[bili2vrchat] 解壓 ffmpeg 失敗。'
+                }
+            } else {
+                Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+            }
+
+            $ffmpegExe = Get-ChildItem -Path $extractDir -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+            if (-not $ffmpegExe) {
+                Write-Error '[bili2vrchat] 下載的壓縮檔中找不到 ffmpeg.exe。'
+            }
+
+            $sourceBin = $ffmpegExe.DirectoryName
+            if (Test-Path $localRoot) { Remove-Item $localRoot -Recurse -Force }
+            New-Item -ItemType Directory -Path $localBin -Force | Out-Null
+            Copy-Item -Path (Join-Path $sourceBin '*') -Destination $localBin -Force
+            Add-ToPath $localBin
+        }
+        finally {
+            if (Test-Path $zipPath) { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
+    if (-not (Test-FfmpegAvailable)) {
+        Write-Error @'
+[bili2vrchat] 安裝後仍找不到 ffmpeg。
+  手動安裝：winget install --id Gyan.FFmpeg --exact
+  或：https://ffmpeg.org/download.html
+'@
+    }
+    Write-Host '[bili2vrchat] ffmpeg 已安裝。'
+}
+
 function Test-BunAvailable {
     return [bool](Get-Command bun -ErrorAction SilentlyContinue)
 }
@@ -134,6 +248,7 @@ function Ensure-Frontend {
 
 Write-Host '[bili2vrchat] 啟動中...'
 Ensure-Uv
+Ensure-Ffmpeg
 Update-Ytdlp
 Ensure-Bun
 Ensure-Frontend
