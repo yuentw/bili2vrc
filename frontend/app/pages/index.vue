@@ -428,38 +428,6 @@ function onResultVideoLoad() {
           <div id="statusMsg">{{ app.statusMsg }}</div>
         </div>
       </div>
-
-      <div v-if="app.showResultBox" id="resultBox" style="display: block">
-        <div class="result-label">✓ 上傳完成 — VRChat 直連</div>
-        <div class="result-link-row">
-          <div id="resultUrl">{{ app.resultUrl }}</div>
-          <button class="btn btn-ghost" id="copyBtn" @click="app.copyUrl()">{{ app.copyBtnText }}</button>
-        </div>
-        <video
-          ref="previewVideo"
-          id="previewVideo"
-          :key="app.resultUrl"
-          controls
-          playsinline
-          preload="metadata"
-          :src="app.resultUrl"
-          @loadeddata="onResultVideoLoad"
-        />
-        <div class="preview-speed">
-          <label for="previewSpeed">預覽速度</label>
-          <input
-            id="previewSpeed"
-            type="range"
-            min="0.5"
-            max="2"
-            step="0.05"
-            :value="app.previewSpeed"
-            @input="onPreviewSpeedInput"
-          >
-          <span id="previewSpeedLabel">{{ app.previewSpeed.toFixed(2) }}x</span>
-        </div>
-        <div class="vrchat-hint">💡 在 VRChat 影片播放器中貼上此連結即可播放</div>
-      </div>
       </aside>
 
       <div class="col-main">
@@ -524,10 +492,10 @@ function onResultVideoLoad() {
                 </td>
               </tr>
               <tr
-                v-for="(format, index) in app.filteredFormats"
+                v-for="(format, pageIndex) in app.pagedFormats"
                 :key="format.format_id"
-                :class="{ selected: app.selectedIdx === index }"
-                @click="app.selectFormat(index)"
+                :class="{ selected: app.selectedIdx === app.formatPageStart + pageIndex }"
+                @click="app.selectFormat(app.formatPageStart + pageIndex)"
               >
                 <td><strong>{{ format.resolution }}</strong></td>
                 <td>
@@ -545,6 +513,57 @@ function onResultVideoLoad() {
             </tbody>
           </table>
         </div>
+        <div v-if="app.showFormatPager" class="fmt-pager">
+          <button
+            type="button"
+            class="btn btn-ghost"
+            :disabled="app.formatPage <= 0"
+            @click="app.setFormatPage(app.formatPage - 1)"
+          >
+            上一頁
+          </button>
+          <span class="fmt-pager-status">第 {{ app.formatPage + 1 }} / {{ app.formatPageCount }} 頁</span>
+          <button
+            type="button"
+            class="btn btn-ghost"
+            :disabled="app.formatPage + 1 >= app.formatPageCount"
+            @click="app.setFormatPage(app.formatPage + 1)"
+          >
+            下一頁
+          </button>
+        </div>
+      </div>
+
+      <div v-if="app.showResultBox" id="resultBox" style="display: block">
+        <div class="result-label">✓ 上傳完成 — VRChat 直連</div>
+        <div class="result-link-row">
+          <div id="resultUrl">{{ app.resultUrl }}</div>
+          <button class="btn btn-ghost" id="copyBtn" @click="app.copyUrl()">{{ app.copyBtnText }}</button>
+        </div>
+        <video
+          ref="previewVideo"
+          id="previewVideo"
+          :key="app.resultUrl"
+          controls
+          playsinline
+          preload="metadata"
+          :src="app.resultUrl"
+          @loadeddata="onResultVideoLoad"
+        />
+        <div class="preview-speed">
+          <label for="previewSpeed">預覽速度</label>
+          <input
+            id="previewSpeed"
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.05"
+            :value="app.previewSpeed"
+            @input="onPreviewSpeedInput"
+          >
+          <span id="previewSpeedLabel">{{ app.previewSpeed.toFixed(2) }}x</span>
+        </div>
+        <div class="vrchat-hint">💡 在 VRChat 影片播放器中貼上此連結即可播放</div>
       </div>
       </div>
     </main>

@@ -15,6 +15,8 @@ import {
   normalizeOutputCodecKey,
 } from './useEncodeCrf'
 
+const FORMAT_PAGE_SIZE = 5
+
 type ProcessEvent = {
   type: string
   job_id?: string
@@ -173,6 +175,7 @@ export function useBili2Vrc() {
 
   const allFormats = ref<VideoFormat[]>([])
   const filteredFormats = ref<VideoFormat[]>([])
+  const formatPage = ref(0)
   const selectedFormat = ref<VideoFormat | null>(null)
   const selectedIdx = ref(-1)
   const selectedIsHdr = computed(() => isHdrRange(selectedFormat.value?.dynamic_range))
@@ -215,6 +218,25 @@ export function useBili2Vrc() {
     }
     return `${fmtCountShown.value} / ${fmtCountTotal.value} 個`
   })
+
+  const formatPageCount = computed(() => {
+    const total = filteredFormats.value.length
+    if (total <= 0) return 1
+    return Math.ceil(total / FORMAT_PAGE_SIZE)
+  })
+  const formatPageStart = computed(() => formatPage.value * FORMAT_PAGE_SIZE)
+  const pagedFormats = computed(() =>
+    filteredFormats.value.slice(
+      formatPageStart.value,
+      formatPageStart.value + FORMAT_PAGE_SIZE,
+    ),
+  )
+  const showFormatPager = computed(() => filteredFormats.value.length > FORMAT_PAGE_SIZE)
+
+  function setFormatPage(page: number) {
+    const lastPage = formatPageCount.value - 1
+    formatPage.value = Math.max(0, Math.min(page, lastPage))
+  }
 
   const retroFmtCountLabel = computed(() => {
     if (!fmtCountShown.value && !fmtCountTotal.value) return ''
@@ -276,6 +298,7 @@ export function useBili2Vrc() {
     fmtTableError.value = isError
     fmtCountShown.value = 0
     fmtCountTotal.value = 0
+    formatPage.value = 0
     selInfoText.value = '尚未選擇格式'
   }
 
@@ -321,6 +344,7 @@ export function useBili2Vrc() {
     filteredFormats.value = filtered
     fmtCountShown.value = filtered.length
     fmtCountTotal.value = allFormats.value.length
+    formatPage.value = 0
 
     if (!filtered.length) {
       fmtTableMessage.value = '此編碼無可用格式'
@@ -675,6 +699,12 @@ export function useBili2Vrc() {
     compatMode,
     allFormats,
     filteredFormats,
+    pagedFormats,
+    formatPage,
+    formatPageCount,
+    formatPageStart,
+    showFormatPager,
+    setFormatPage,
     selectedFormat,
     selectedIdx,
     codecFamilies,
