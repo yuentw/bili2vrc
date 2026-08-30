@@ -68,7 +68,7 @@ ENCODER_PRESETS: dict[str, tuple[str, list[str], str | None]] = {
     "libsvtav1": ("libsvtav1 (軟體)", [], None),
     "h264_nvenc": (
         "NVENC (NVIDIA)",
-        ["-preset", "p4", "-rc", "vbr", "-cq", "23", "-profile:v", "main", "-b:v", "0"],
+        ["-preset", "p4", "-rc:v", "vbr", "-cq", "23", "-profile:v", "main", "-b:v", "0"],
         None,
     ),
     "h264_videotoolbox": (
@@ -262,7 +262,7 @@ def video_encode_args(
             else:
                 profile = []
             return [
-                "-preset", nvenc_preset, "-rc", "cbr", *profile,
+                "-preset", nvenc_preset, "-rc:v", "cbr", *profile,
                 "-b:v", bitrate, "-minrate", bitrate, "-maxrate", maxrate,
                 "-bufsize", bufsize,
             ]
@@ -319,7 +319,7 @@ def video_encode_args(
         else:
             profile = []
         return [
-            "-preset", nvenc_preset, "-rc", "vbr", "-cq", cq, *profile,
+            "-preset", nvenc_preset, "-rc:v", "vbr", "-cq", cq, *profile,
             "-b:v", target, "-maxrate", maxrate, "-bufsize", bufsize,
         ]
     if encoder_name.endswith("_videotoolbox"):
