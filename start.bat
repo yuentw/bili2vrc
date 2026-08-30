@@ -46,7 +46,10 @@ if exist "%USERPROFILE%\.local\bin\uv.exe" (
   if not errorlevel 1 exit /b 0
 )
 
-echo [bili2vrchat] uv not found. Installing into .uv ...
+echo [bili2vrchat] uv not found. Install into .uv?
+call :confirm_install
+if errorlevel 1 exit /b 1
+echo [bili2vrchat] Installing uv into .uv ...
 set "UV_INSTALL_DIR=%~dp0.uv"
 set "UV_NO_MODIFY_PATH=1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://astral.sh/uv/install.ps1 | iex"
@@ -82,9 +85,12 @@ if exist "%~dp0.ffmpeg\bin\ffmpeg.exe" (
   )
 )
 
-echo [bili2vrchat] ffmpeg not found. Installing with winget ...
 where winget >nul 2>&1
 if not errorlevel 1 (
+  echo [bili2vrchat] ffmpeg not found. Install with winget?
+  call :confirm_install
+  if errorlevel 1 exit /b 1
+  echo [bili2vrchat] Installing ffmpeg with winget ...
   winget install --id Gyan.FFmpeg --exact --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
   if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" (
     set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
@@ -104,7 +110,10 @@ if not errorlevel 1 (
   )
 )
 
-echo [bili2vrchat] winget unavailable or failed. Installing into .ffmpeg ...
+echo [bili2vrchat] ffmpeg not found. Install into .ffmpeg?
+call :confirm_install
+if errorlevel 1 exit /b 1
+echo [bili2vrchat] Installing ffmpeg into .ffmpeg ...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $root=(Get-Location).Path; $asset=if($env:PROCESSOR_ARCHITECTURE -eq 'ARM64'){'ffmpeg-master-latest-winarm64-gpl.zip'}else{'ffmpeg-master-latest-win64-gpl.zip'}; $zip=Join-Path $root '.ffmpeg-download.zip'; $ex=Join-Path $root '.ffmpeg-extract'; $bin=Join-Path $root '.ffmpeg\bin'; curl.exe -fL --retry 3 -o $zip ('https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/' + $asset); if($LASTEXITCODE -ne 0){throw 'download failed'}; if(Test-Path $ex){Remove-Item $ex -Recurse -Force}; New-Item -ItemType Directory -Path $ex -Force | Out-Null; tar.exe -xf $zip -C $ex; if($LASTEXITCODE -ne 0){throw 'extract failed'}; $ff=(Get-ChildItem $ex -Recurse -Filter ffmpeg.exe | Select-Object -First 1); if(-not $ff){throw 'ffmpeg.exe missing'}; if(Test-Path (Join-Path $root '.ffmpeg')){Remove-Item (Join-Path $root '.ffmpeg') -Recurse -Force}; New-Item -ItemType Directory -Path $bin -Force | Out-Null; Copy-Item (Join-Path $ff.DirectoryName '*') $bin -Force; Remove-Item $zip -Force; Remove-Item $ex -Recurse -Force"
 if errorlevel 1 (
   echo [bili2vrchat] Failed to install ffmpeg.
@@ -151,7 +160,10 @@ if exist "%~dp0.bun\bin\bun.exe" (
   exit /b 0
 )
 
-echo [bili2vrchat] bun not found. Installing into .bun ...
+echo [bili2vrchat] bun not found. Install into .bun?
+call :confirm_install
+if errorlevel 1 exit /b 1
+echo [bili2vrchat] Installing bun into .bun ...
 set "BUN_INSTALL=%~dp0.bun"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://bun.sh/install.ps1 | iex"
 if errorlevel 1 (
@@ -174,7 +186,10 @@ exit /b 0
 if exist "%~dp0frontend\.output\public\index.html" goto :frontend_ok
 if exist "%~dp0frontend\.output\public\200.html" goto :frontend_ok
 
-echo [bili2vrchat] Frontend not built. Building ...
+echo [bili2vrchat] Frontend not built. Run bun install and bun run generate?
+call :confirm_install
+if errorlevel 1 exit /b 1
+echo [bili2vrchat] Building frontend ...
 pushd "%~dp0frontend" || exit /b 1
 call bun install
 if errorlevel 1 (
@@ -197,6 +212,13 @@ exit /b 1
 
 :frontend_ok
 exit /b 0
+
+:confirm_install
+set /p "CONFIRM_REPLY=[y/N] "
+if /i "%CONFIRM_REPLY%"=="y" exit /b 0
+if /i "%CONFIRM_REPLY%"=="yes" exit /b 0
+echo [bili2vrchat] Cancelled.
+exit /b 1
 
 :end_error
 echo.

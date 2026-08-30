@@ -5,6 +5,19 @@ ROOT="$(pwd)"
 
 echo "[bili2vrchat] 啟動中..."
 
+confirm_install() {
+  local prompt="$1"
+  printf '%s [y/N] ' "$prompt"
+  read -r reply
+  case "${reply}" in
+    [yY]|[yY][eE][sS]) return 0 ;;
+    *)
+      echo "[bili2vrchat] 已取消。" >&2
+      exit 1
+      ;;
+  esac
+}
+
 ensure_uv() {
   if command -v uv >/dev/null 2>&1; then
     return 0
@@ -20,7 +33,8 @@ ensure_uv() {
     return 0
   fi
 
-  echo "[bili2vrchat] 未找到 uv，正在安裝到 .uv ..."
+  confirm_install "[bili2vrchat] 未找到 uv。是否安裝到 .uv？"
+  echo "[bili2vrchat] 正在安裝 uv 到 .uv ..."
   export UV_INSTALL_DIR="$ROOT/.uv"
   export UV_NO_MODIFY_PATH=1
 
@@ -57,14 +71,14 @@ ensure_ffmpeg() {
     return 0
   fi
 
-  echo "[bili2vrchat] 未找到 ffmpeg，正在安裝到 .ffmpeg ..."
-
   local os arch url
   os="$(uname -s)"
   arch="$(uname -m)"
 
   if [[ "$os" == "Darwin" ]]; then
     if command -v brew >/dev/null 2>&1; then
+      confirm_install "[bili2vrchat] 未找到 ffmpeg。是否用 Homebrew 安裝？"
+      echo "[bili2vrchat] 正在用 Homebrew 安裝 ffmpeg ..."
       brew install ffmpeg
       if ffmpeg_available; then
         echo "[bili2vrchat] ffmpeg 已安裝。"
@@ -89,6 +103,9 @@ ensure_ffmpeg() {
       exit 1
       ;;
   esac
+
+  confirm_install "[bili2vrchat] 未找到 ffmpeg。是否下載安裝到 .ffmpeg？"
+  echo "[bili2vrchat] 正在安裝 ffmpeg 到 .ffmpeg ..."
 
   local archive="$ROOT/.ffmpeg-download.tar.xz"
   local extract="$ROOT/.ffmpeg-extract"
@@ -143,7 +160,8 @@ ensure_bun() {
     return 0
   fi
 
-  echo "[bili2vrchat] 未找到 bun，正在安裝到 .bun ..."
+  confirm_install "[bili2vrchat] 未找到 bun。是否安裝到 .bun？"
+  echo "[bili2vrchat] 正在安裝 bun 到 .bun ..."
   export BUN_INSTALL="$ROOT/.bun"
 
   if command -v curl >/dev/null 2>&1; then
@@ -169,7 +187,8 @@ ensure_frontend() {
     return 0
   fi
 
-  echo "[bili2vrchat] 前端尚未建置，正在建置 ..."
+  confirm_install "[bili2vrchat] 前端尚未建置。是否執行 bun install 與 bun run generate？"
+  echo "[bili2vrchat] 正在建置前端 ..."
   (
     cd "$ROOT/frontend"
     bun install

@@ -11,6 +11,15 @@ function Add-ToPath {
     }
 }
 
+function Confirm-Install {
+    param([string]$Prompt)
+    $reply = Read-Host "$Prompt [y/N]"
+    if ($reply -match '^(y|yes)$') {
+        return
+    }
+    throw '[bili2vrchat] 已取消。'
+}
+
 function Test-UvAvailable {
     return [bool](Get-Command uv -ErrorAction SilentlyContinue)
 }
@@ -36,7 +45,8 @@ function Ensure-Uv {
         }
     }
 
-    Write-Host '[bili2vrchat] 未找到 uv，正在安裝到 .uv ...'
+    Confirm-Install '[bili2vrchat] 未找到 uv。是否安裝到 .uv？'
+    Write-Host '[bili2vrchat] 正在安裝 uv 到 .uv ...'
     $env:UV_INSTALL_DIR = Join-Path $Root '.uv'
     $env:UV_NO_MODIFY_PATH = '1'
     iex (irm 'https://astral.sh/uv/install.ps1')
@@ -113,7 +123,8 @@ function Ensure-Ffmpeg {
 
     $wingetOk = $false
     if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host '[bili2vrchat] 未找到 ffmpeg，正在用 winget 安裝 ...'
+        Confirm-Install '[bili2vrchat] 未找到 ffmpeg。是否用 winget 安裝？'
+        Write-Host '[bili2vrchat] 正在用 winget 安裝 ffmpeg ...'
         & winget install --id Gyan.FFmpeg --exact --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
@@ -124,7 +135,8 @@ function Ensure-Ffmpeg {
     }
 
     if (-not $wingetOk) {
-        Write-Host '[bili2vrchat] 改為安裝到 .ffmpeg ...'
+        Confirm-Install '[bili2vrchat] 未找到 ffmpeg。是否下載安裝到 .ffmpeg？'
+        Write-Host '[bili2vrchat] 正在安裝 ffmpeg 到 .ffmpeg ...'
         $asset = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
             'ffmpeg-master-latest-winarm64-gpl.zip'
         } else {
@@ -201,7 +213,8 @@ function Ensure-Bun {
         return
     }
 
-    Write-Host '[bili2vrchat] 未找到 bun，正在安裝到 .bun ...'
+    Confirm-Install '[bili2vrchat] 未找到 bun。是否安裝到 .bun？'
+    Write-Host '[bili2vrchat] 正在安裝 bun 到 .bun ...'
     $env:BUN_INSTALL = Join-Path $Root '.bun'
     iex (irm 'https://bun.sh/install.ps1')
 
@@ -225,7 +238,8 @@ function Ensure-Frontend {
         return
     }
 
-    Write-Host '[bili2vrchat] 前端尚未建置，正在建置 ...'
+    Confirm-Install '[bili2vrchat] 前端尚未建置。是否執行 bun install 與 bun run generate？'
+    Write-Host '[bili2vrchat] 正在建置前端 ...'
     Push-Location (Join-Path $Root 'frontend')
     try {
         & bun install
