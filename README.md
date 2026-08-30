@@ -263,24 +263,26 @@ Image: Bun builds Nuxt frontend; Python deps via `uv sync` from `uv.lock`; `CMD`
 
 ---
 
-## Tampermonkey: Bilibili → bili2vrc
+## Tampermonkey: Bilibili / YouTube → bili2vrc
 
-Optional userscript: hover a Bilibili video cover → **下載解析** → opens bili2vrc with `?url=` filled and **Fetch formats** started so you can pick a resolution.
+Optional userscript: hover a video cover → **下載解析** → opens bili2vrc with `?url=` filled and **Fetch formats** started so you can pick a resolution.
 
-Works on cover hover (home / search / dynamics, etc.), **favorites**, **history**, and watch-page **related** cards.
+**Bilibili:** cover hover (home / search / dynamics, etc.), **favorites**, **history**, and watch-page **related** cards.
+
+**YouTube:** home, **watch history** (`/feed/history`), **subscriptions** (`/feed/subscriptions`), search, channel videos, watch-page **related** cards, **watch** page (**下載解析** to the left of Like), and **Shorts** (above Like in the right-hand action stack). The watch-page button is inline in the action bar so it does not overlay fullscreen playback.
 
 **[Install bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** — opens the Tampermonkey install page (requires [Tampermonkey](https://www.tampermonkey.net/) first).
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/)
 2. Click **[Install bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** and confirm install
 3. Start bili2vrc (`start.ps1` / `start.bat` / `start.sh`)
-4. On Bilibili, hover a video card and click **下載解析**
+4. On Bilibili or YouTube, hover a video card and click **下載解析**. On a YouTube watch page, use the button to the left of Like; on Shorts, use the button above Like.
 
 Source: [userscripts/bili2vrc-bridge.user.js](userscripts/bili2vrc-bridge.user.js)
 
 Default target: `http://localhost:5000`. Change via Tampermonkey menu → **設定 bili2vrc 網址**.
 
-Deep link format: `http://localhost:5000/?url=<encoded bilibili video URL>`
+Deep link format: `http://localhost:5000/?url=<encoded video URL>`
 
 ---
 
@@ -390,7 +392,7 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | `start.ps1` / `start.bat` / `start.sh` | Auto-install uv / ffmpeg / Bun, refresh yt-dlp, build frontend, `uv run app.py` |
 | `build-image.sh` | Docker image build helper |
 | `Dockerfile` | Multi-stage: Bun frontend + `uv sync` + Python runtime |
-| `userscripts/bili2vrc-bridge.user.js` | Optional Tampermonkey bridge (Bilibili → bili2vrc) |
+| `userscripts/bili2vrc-bridge.user.js` | Optional Tampermonkey bridge (Bilibili / YouTube → bili2vrc) |
 | `temp/` | Download/transcode scratch (gitignored) |
 
 ---

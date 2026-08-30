@@ -263,24 +263,26 @@ docker run --rm -p 5000:5000 \
 
 ---
 
-## Tampermonkey：Bilibili → bili2vrc
+## Tampermonkey：Bilibili／YouTube → bili2vrc
 
-可選 userscript：滑鼠停在 Bilibili 影片封面上 → **下載解析** → 開啟 bili2vrc，帶入 `?url=` 並開始**獲取格式**，方便選畫質。
+可選 userscript：滑鼠停在影片封面上 → **下載解析** → 開啟 bili2vrc，帶入 `?url=` 並開始**獲取格式**，方便選畫質。
 
-適用封面懸浮（首頁／搜尋／動態等）、**收藏**、**歷史記錄**、播放頁**相關推薦**卡片。
+**Bilibili：** 封面懸浮（首頁／搜尋／動態等）、**收藏**、**歷史記錄**、播放頁**相關推薦**卡片。
+
+**YouTube：** 首頁、**觀看紀錄**（`/feed/history`）、**訂閱／新影片**（`/feed/subscriptions`）、搜尋、頻道影片、觀看頁**右側推薦**、**觀看頁**（**下載解析** 在按讚鈕左邊），以及 **Shorts**（右側互動欄、按讚鈕上方）。觀看頁鈕在動作列內，全螢幕時不會蓋住畫面。
 
 **[安裝 bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** — 開啟 Tampermonkey 安裝頁（需先裝 [Tampermonkey](https://www.tampermonkey.net/)）。
 
 1. 安裝 [Tampermonkey](https://www.tampermonkey.net/)
 2. 點 **[安裝 bili2vrc Bridge](https://raw.githubusercontent.com/yuentw/bili2vrc/main/userscripts/bili2vrc-bridge.user.js)** 並確認安裝
 3. 啟動 bili2vrc（`start.ps1`／`start.bat`／`start.sh`）
-4. 在 Bilibili 將游標停在影片卡片上，點 **下載解析**
+4. 在 Bilibili 或 YouTube 將游標停在影片卡片上，點 **下載解析**。YouTube 觀看頁請用按讚鈕左邊的鈕；Shorts 請用右側按讚上方的鈕。
 
 原始碼：[userscripts/bili2vrc-bridge.user.js](userscripts/bili2vrc-bridge.user.js)
 
 預設目標：`http://localhost:5000`。可在 Tampermonkey 選單 → **設定 bili2vrc 網址** 變更。
 
-深連結格式：`http://localhost:5000/?url=<編碼後的 bilibili 影片網址>`
+深連結格式：`http://localhost:5000/?url=<編碼後的影片網址>`
 
 ---
 
@@ -390,7 +392,7 @@ docker run --rm -p 5000:5000 \
 | `start.ps1`／`start.bat`／`start.sh` | 自動安裝 uv／ffmpeg／Bun、更新 yt-dlp、建置前端、`uv run app.py` |
 | `build-image.sh` | Docker 映像建置輔助 |
 | `Dockerfile` | 多階段：Bun 前端 + `uv sync` + Python 執行環境 |
-| `userscripts/bili2vrc-bridge.user.js` | 可選 Tampermonkey 橋接（Bilibili → bili2vrc） |
+| `userscripts/bili2vrc-bridge.user.js` | 可選 Tampermonkey 橋接（Bilibili／YouTube → bili2vrc） |
 | `temp/` | 下載／轉碼暫存（已 gitignore） |
 
 ---
