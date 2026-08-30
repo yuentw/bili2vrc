@@ -36,10 +36,10 @@ export function useBili2Vrc() {
   const encodeMode = ref('vbr')
   const encodeCrfByCodec = ref(defaultEncodeCrfByCodec())
   type OutputMode = 'original' | 'av1' | 'h264'
-  const outputMode = ref<OutputMode>('av1')
+  const outputMode = ref<OutputMode>('original')
   const outputModeOptions: { value: OutputMode; label: string }[] = [
     { value: 'original', label: '保留原始' },
-    { value: 'av1', label: 'AV1（預設）' },
+    { value: 'av1', label: 'AV1' },
     { value: 'h264', label: 'H264' },
   ]
   const compatMode = computed(() => outputMode.value === 'h264')
@@ -66,11 +66,12 @@ export function useBili2Vrc() {
         return 'HDR→SDR 需重編碼，無法保留原始編碼'
       }
       return originalModeDisabled.value
-        ? '非原速時無法保留原始編碼，已改為 AV1'
+        ? '非原速時無法保留原始編碼，已自動改為 AV1'
         : '僅套用 faststart，不重新編碼（最快）'
     }
     if (outputMode.value === 'av1') {
-      return '重新編碼為 AV1，檔案較小；NVIDIA 40 系等支援硬體編碼'
+      const speedNote = playbackSpeedForcesReencode.value ? '；倍速時已自動切換' : ''
+      return `重新編碼為 AV1，檔案較小；NVIDIA 40 系等支援硬體編碼${speedNote}`
     }
     return '重新編碼為 H.264 Main Profile，修復 VRChat 固定時間點撕裂問題'
   })
@@ -148,17 +149,17 @@ export function useBili2Vrc() {
       : '變更為非 1.0x 會強制重新編碼影片',
   )
 
-  watch(playbackSpeed, () => {
-    if (originalModeDisabled.value && outputMode.value === 'original') {
+  function syncOutputModeForPlaybackConditions() {
+    if (tonemapHdr.value || playbackSpeedForcesReencode.value) {
       outputMode.value = 'av1'
+    } else {
+      outputMode.value = 'original'
     }
-  })
+  }
 
-  watch(tonemapHdr, (enabled) => {
-    if (enabled && outputMode.value === 'original') {
-      outputMode.value = 'av1'
-    }
-  })
+  watch(playbackSpeed, syncOutputModeForPlaybackConditions)
+
+  watch(tonemapHdr, syncOutputModeForPlaybackConditions)
 
   watch(encodeMode, (mode) => {
     const source = sourceBitrateKbps.value
