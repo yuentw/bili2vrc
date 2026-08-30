@@ -15,7 +15,7 @@ import {
   normalizeOutputCodecKey,
 } from './useEncodeCrf'
 
-const FORMAT_PAGE_SIZE = 5
+const FORMAT_PAGE_SIZE = 4
 
 type ProcessEvent = {
   type: string
@@ -212,11 +212,8 @@ export function useBili2Vrc() {
   const cancelBtnDisabled = ref(false)
 
   const fmtCountLabel = computed(() => {
-    if (!fmtCountShown.value && !fmtCountTotal.value) return ''
-    if (fmtCountShown.value === fmtCountTotal.value) {
-      return `${fmtCountShown.value} 個`
-    }
-    return `${fmtCountShown.value} / ${fmtCountTotal.value} 個`
+    if (!fmtCountShown.value) return ''
+    return `${fmtCountShown.value} 個`
   })
 
   const formatPageCount = computed(() => {
