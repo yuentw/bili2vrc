@@ -109,19 +109,31 @@ function waitForManualPaste(): Promise<string | null> {
 }
 
 async function pasteAndFetch() {
-  if (app.fetchLoading || pasteWaiting.value) return
+  if (app.fetchLoading) return
+  if (pasteWaiting.value) {
+    pasteWaitCleanup?.()
+  }
 
   let text = ''
+  let clipboardHadNoText = false
   if (window.isSecureContext && navigator.clipboard?.readText) {
     const permission = await requestClipboardReadPermission()
     if (permission !== 'denied') {
       try {
         // Triggers the browser clipboard permission prompt when state is "prompt".
         text = (await navigator.clipboard.readText()).trim()
-      } catch {
-        /* fall through to Ctrl+V */
+        clipboardHadNoText = !text
+      } catch (err) {
+        const name = err instanceof DOMException ? err.name : ''
+        if (name === 'NotFoundError' || name === 'DataError') {
+          clipboardHadNoText = true
+        }
       }
     }
+  }
+
+  if (!text && clipboardHadNoText) {
+    return
   }
 
   if (!text) {
