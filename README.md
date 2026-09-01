@@ -248,9 +248,11 @@ Build:
 
 #### Transcode in container
 
-The image includes **static ffmpeg** (portable, multi-arch). It has **no GPU encoders** (no NVENC, QSV, VAAPI) and **no libplacebo** (HDR→SDR tonemap).
+The image includes **static ffmpeg** (portable, multi-arch). Transcode is **CPU software only** — `libx264`, `libx265`, or `libsvtav1` depending on output codec.
 
-If you **do not** mount your own ffmpeg, transcode uses **CPU software encoders only** — `libx264`, `libx265`, or `libsvtav1` depending on output codec. `HW_ENCODER=auto` will not select NVENC inside the default image.
+> **No hardware encoders in Docker.** The bundled ffmpeg has **no NVIDIA NVENC**, Intel QSV, AMD AMF, VAAPI, or Apple VideoToolbox. Passing `--gpus` or setting `HW_ENCODER=h264_nvenc` (or any other hardware encoder) **does not work** in the container. Mounting host ffmpeg is **not supported** (broken merges, missing shared libraries, glibc mismatches). For NVENC or other GPU encode, run bili2vrc **natively** on the host ([Install & run](#install--run)).
+
+HDR→SDR tonemap (`libplacebo`) is also unavailable in Docker.
 
 Verify after start:
 
@@ -277,47 +279,6 @@ docker run --rm -p 5000:5000 \
   -v "$(pwd)/temp:/app/temp" \
   mio9/bili2vrc:latest
 ```
-
-#### Docker + GPU / NVENC (advanced)
-
-To use **NVIDIA NVENC**, bind-mount a host ffmpeg built with NVENC and pass the GPU into the container. Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on the host.
-
-Host check:
-
-```bash
-ffmpeg -hide_banner -encoders | grep nvenc
-```
-
-Compose (gpu profile in `docker-compose.example.yml`):
-
-```bash
-export FFMPEG_HOST_PATH=/usr/bin/ffmpeg    # adjust if needed
-export FFPROBE_HOST_PATH=/usr/bin/ffprobe
-docker compose --profile gpu up -d
-```
-
-Or `docker run`:
-
-```bash
-docker run --rm -p 5000:5000 \
-  --gpus all \
-  -e NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
-  -e HW_ENCODER=h264_nvenc \
-  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg:ro \
-  -v "$(which ffprobe)":/usr/local/bin/ffprobe:ro \
-  --env-file .env \
-  -v "$(pwd)/temp:/app/temp" \
-  mio9/bili2vrc:latest
-```
-
-Verify NVENC:
-
-```bash
-curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
-# expect encoder "h264_nvenc", fallback false
-```
-
-Host ffmpeg must be **glibc-compatible** with the Debian-based image (Linux amd64 dynamic builds work best). HDR→SDR tonemap additionally requires a host ffmpeg with **libplacebo** and Vulkan — mount the same way.
 
 Image: Bun builds Nuxt frontend; Python deps via `uv sync` from `uv.lock`; `CMD` is `uv run app.py`. Includes static **ffmpeg** (software transcode only), **aria2**, **nodejs**. Pass R2/S3 credentials via `--env-file` (do not bake secrets into the image).
 
@@ -418,7 +379,7 @@ A **background thread** in this app scans the bucket every `R2_CLEANUP_INTERVAL`
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `5000` | HTTP port |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt static output directory |
-| `HW_ENCODER` | `auto` | `auto`, `av1_nvenc`, `libsvtav1`, `h264_nvenc`, `libx264`, `h264_qsv`, … |
+| `HW_ENCODER` | `auto` | `auto`, `av1_nvenc`, `libsvtav1`, `h264_nvenc`, `libx264`, `h264_qsv`, … — **native install only**; Docker always uses software encoders regardless of this setting |
 | `DISABLE_HW_ACCEL` | off | `1` / `true` to force software encode/decode only |
 | `LOG_LEVEL` | `INFO` | Python log level |
 | `DISABLE_ARIA2C` | off | `1` / `true` to disable aria2c |
@@ -451,7 +412,7 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | `requirements.txt` | Legacy pip list (mirror of main deps) |
 | `start.ps1` / `start.bat` / `start.sh` | Auto-install uv / ffmpeg / Bun, refresh yt-dlp, build frontend, `uv run app.py` |
 | `build-image.sh` | Docker image build helper |
-| `docker-compose.example.yml` | Example Compose (software transcode default; optional `gpu` profile for NVENC) |
+| `docker-compose.example.yml` | Example Compose (software transcode only; no GPU / NVENC) |
 | `Dockerfile` | Multi-stage: Bun frontend + `uv sync` + Python runtime |
 | `userscripts/bili2vrc-bridge.user.js` | Optional Tampermonkey bridge (Bilibili / YouTube → bili2vrc) |
 | `temp/` | Download/transcode scratch (gitignored) |
@@ -476,3 +437,4 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | Paste can’t read clipboard | Use `http://127.0.0.1:5000` or HTTPS; on LAN HTTP use Ctrl+V fallback or paste manually |
 | HDR looks washed / crushed | Enable **HDR → SDR** on an HDR format; try another **Mapping** (Mobius / BT.2390 / Hable). Needs ffmpeg with **libplacebo** + Vulkan |
 | Does 1.0x re-encode? | Only with **Keep original** and HDR→SDR off: no (faststart + verify). **AV1** / **H.264** / speed change / HDR→SDR always re-encode |
+| Need NVENC / GPU encode | Docker is **not supported** — run natively (`start.sh` / `start.ps1`) with host ffmpeg and drivers. In Docker, expect `libx264` / `libsvtav1` only |
