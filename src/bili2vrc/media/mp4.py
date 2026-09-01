@@ -3,7 +3,7 @@ import logging
 import os
 import subprocess
 
-from bili2vrc.media.ffmpeg_paths import bundled_ffmpeg_bin, bundled_ffprobe_bin
+logger = logging.getLogger("bili2vrchat")
 
 
 def verify_mp4(filepath: str):
@@ -13,7 +13,7 @@ def verify_mp4(filepath: str):
     try:
         result = subprocess.run(
             [
-                bundled_ffprobe_bin(), "-v", "quiet",
+                "ffprobe", "-v", "quiet",
                 "-print_format", "json",
                 "-show_streams",
                 "-show_format",
@@ -53,7 +53,7 @@ def apply_faststart(src: str, dst: str) -> bool:
     """ffmpeg -c copy -movflags +faststart"""
     try:
         result = subprocess.run(
-            [bundled_ffmpeg_bin(), "-i", src,
+            ["ffmpeg", "-i", src,
              "-c", "copy",
              "-movflags", "+faststart",
              "-y", dst],
@@ -68,7 +68,7 @@ def probe_has_audio(filepath: str) -> bool:
     try:
         result = subprocess.run(
             [
-                bundled_ffprobe_bin(), "-v", "quiet",
+                "ffprobe", "-v", "quiet",
                 "-select_streams", "a:0",
                 "-show_entries", "stream=index",
                 "-of", "csv=p=0",

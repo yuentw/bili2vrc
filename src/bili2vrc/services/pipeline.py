@@ -12,7 +12,6 @@ from bili2vrc import config
 from bili2vrc.constants import clamp_playback_speed
 from bili2vrc.download.cookies import get_cookie_args
 from bili2vrc.download.ytdlp import get_aria2c_cmd, get_ytdlp_js_args, should_use_aria2c
-from bili2vrc.media.ffmpeg_paths import ytdlp_ffmpeg_location
 from bili2vrc.encoding import hwaccel
 from bili2vrc.media.mp4 import apply_faststart, verify_mp4
 from bili2vrc.media.transcode import transcode_video
@@ -112,7 +111,6 @@ def run_process(
             "--no-playlist",
             "--newline",
             *get_ytdlp_js_args(),
-            "--ffmpeg-location", ytdlp_ffmpeg_location(),
             "--retries", "15",
             "--fragment-retries", "15",
             "--retry-sleep", "3",

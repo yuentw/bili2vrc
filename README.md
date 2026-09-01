@@ -252,8 +252,6 @@ The image includes **static ffmpeg** (portable, multi-arch). It has **no GPU enc
 
 If you **do not** mount your own ffmpeg, transcode uses **CPU software encoders only** — `libx264`, `libx265`, or `libsvtav1` depending on output codec. `HW_ENCODER=auto` will not select NVENC inside the default image.
 
-**ffmpeg paths:** yt-dlp merge always uses **`FFMPEG_BUNDLED_BIN`** (image default: `/usr/local/bin/ffmpeg-bundled`). Transcode uses **`FFMPEG_BIN`** / **`FFPROBE_BIN`** when set; otherwise the bundled binaries. See [Configuration reference](#configuration-reference).
-
 Verify after start:
 
 ```bash
@@ -284,15 +282,10 @@ docker run --rm -p 5000:5000 \
 
 To use **NVIDIA NVENC**, bind-mount a host ffmpeg built with NVENC and pass the GPU into the container. Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on the host.
 
-**Important:** Mount host ffmpeg as **`ffmpeg-nvenc`**, not over `/usr/local/bin/ffmpeg`. yt-dlp uses the bundled **`ffmpeg-bundled`** for download/merge; replacing `ffmpeg` breaks merge and causes「下載完成但找不到輸出檔案」. Set `FFMPEG_BIN` / `FFPROBE_BIN` for transcode only.
-
-Host ffmpeg is usually **dynamically linked**. Also mount its shared libraries into the container (Compose gpu profile mounts `/usr/lib/x86_64-linux-gnu` → `/usr/local/lib/ffmpeg-host`; the app prepends that to `LD_LIBRARY_PATH` when `FFMPEG_BIN` is set). If you still see `libavdevice.so.*: cannot open shared object file`, check `ldd $(which ffmpeg)` on the host and mount those directories, or set `FFMPEG_LD_LIBRARY_PATH` (colon-separated container paths).
-
 Host check:
 
 ```bash
 ffmpeg -hide_banner -encoders | grep nvenc
-ldd "$(which ffmpeg)" | grep libav
 ```
 
 Compose (gpu profile in `docker-compose.example.yml`):
@@ -300,7 +293,6 @@ Compose (gpu profile in `docker-compose.example.yml`):
 ```bash
 export FFMPEG_HOST_PATH=/usr/bin/ffmpeg    # adjust if needed
 export FFPROBE_HOST_PATH=/usr/bin/ffprobe
-export FFMPEG_LIB_HOST_PATH=/usr/lib  # where libav*.so live on host
 docker compose --profile gpu up -d
 ```
 
@@ -310,12 +302,9 @@ Or `docker run`:
 docker run --rm -p 5000:5000 \
   --gpus all \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
-  -e FFMPEG_BIN=/usr/local/bin/ffmpeg-nvenc \
-  -e FFPROBE_BIN=/usr/local/bin/ffprobe-nvenc \
   -e HW_ENCODER=h264_nvenc \
-  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg-nvenc:ro \
-  -v "$(which ffprobe)":/usr/local/bin/ffprobe-nvenc:ro \
-  -v /usr/lib/x86_64-linux-gnu:/usr/local/lib/ffmpeg-host:ro \
+  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg:ro \
+  -v "$(which ffprobe)":/usr/local/bin/ffprobe:ro \
   --env-file .env \
   -v "$(pwd)/temp:/app/temp" \
   mio9/bili2vrc:latest
@@ -426,14 +415,6 @@ A **background thread** in this app scans the bucket every `R2_CLEANUP_INTERVAL`
 | `DEFAULT_ENCODE_QUALITY` | `balanced` | `high` / `balanced` / `medium` / `small` |
 | `DEFAULT_OUTPUT_CODEC` | `av1` | API default codec when not keeping original (`av1` / `h264` / `h265`). The **UI** still defaults to Keep original |
 | `YTDLP_JS_RUNTIME` | `auto` | `auto` (node → bun → deno) / `node` / `bun` / `deno` |
-| `FFMPEG_BUNDLED_BIN` | empty | yt-dlp merge/remux and MP4 verify; image default `/usr/local/bin/ffmpeg-bundled`, native install uses `ffmpeg` on PATH |
-| `FFPROBE_BUNDLED_BIN` | empty | Bundled ffprobe for verify; image default `/usr/local/bin/ffprobe-bundled` |
-| `FFMPEG_BIN` | empty | Transcode/encode ffmpeg; when set (e.g. `/usr/local/bin/ffmpeg-nvenc`), overrides bundled for encode and hwaccel probe |
-| `FFPROBE_BIN` | empty | Transcode ffprobe; when empty, uses bundled or auto-pairs with `FFMPEG_BIN` when it ends with `-nvenc` |
-| `FFMPEG_HOST_PATH` | `/usr/bin/ffmpeg` | **Compose `gpu` profile only** — host path mounted to `/usr/local/bin/ffmpeg-nvenc` |
-| `FFPROBE_HOST_PATH` | `/usr/bin/ffprobe` | **Compose `gpu` profile only** — host path mounted to `/usr/local/bin/ffprobe-nvenc` |
-| `FFMPEG_LIB_HOST_PATH` | `/usr/lib/x86_64-linux-gnu` | **Compose `gpu` profile only** — host lib dir mounted to `/usr/local/lib/ffmpeg-host` for dynamic ffmpeg |
-| `FFMPEG_LD_LIBRARY_PATH` | empty | Extra container paths prepended to `LD_LIBRARY_PATH` for transcode ffmpeg (colon-separated); auto-adds `/usr/local/lib/ffmpeg-host` when `FFMPEG_BIN` is set and that dir exists |
 | `HOST` | `0.0.0.0` | Bind address |
 | `PORT` | `5000` | HTTP port |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt static output directory |
@@ -460,7 +441,7 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | `src/bili2vrc/config.py` | Settings (R2, TTL, encode, paths); loads `.env` |
 | `src/bili2vrc/api/` | REST + SSE routes (`/api/*`) |
 | `src/bili2vrc/services/` | Format fetch, download/upload pipeline, job control |
-| `src/bili2vrc/media/` | ffmpeg transcode, MP4 verify / faststart; `ffmpeg_paths.py` resolves bundled vs transcode binaries |
+| `src/bili2vrc/media/` | ffmpeg transcode, MP4 verify / faststart |
 | `src/bili2vrc/download/` | yt-dlp helpers, cookies, aria2c |
 | `src/bili2vrc/storage/r2.py` | R2 upload, public URL, expiry cleanup |
 | `src/bili2vrc/encoding/hwaccel.py` | Hardware encoder detection and ffmpeg args |
@@ -495,4 +476,3 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | Paste can’t read clipboard | Use `http://127.0.0.1:5000` or HTTPS; on LAN HTTP use Ctrl+V fallback or paste manually |
 | HDR looks washed / crushed | Enable **HDR → SDR** on an HDR format; try another **Mapping** (Mobius / BT.2390 / Hable). Needs ffmpeg with **libplacebo** + Vulkan |
 | Does 1.0x re-encode? | Only with **Keep original** and HDR→SDR off: no (faststart + verify). **AV1** / **H.264** / speed change / HDR→SDR always re-encode |
-| Docker NVENC: `libavdevice.so.*` missing | Mount host ffmpeg **libs** (gpu profile: `FFMPEG_LIB_HOST_PATH` → `/usr/local/lib/ffmpeg-host`), or set `FFMPEG_LD_LIBRARY_PATH`. Host ffmpeg must be glibc-compatible with the image |

@@ -252,8 +252,6 @@ cd frontend && bun run dev   # :3000 — 熱更新；/api/* → :5000
 
 若**未**掛載本機 ffmpeg，轉碼僅使用 **CPU 軟體編碼器** — 依輸出格式為 `libx264`、`libx265` 或 `libsvtav1`。預設映像檔內 `HW_ENCODER=auto` **不會**選到 NVENC。
 
-**ffmpeg 路徑：** yt-dlp 合併固定用 **`FFMPEG_BUNDLED_BIN`**（映像預設 `/usr/local/bin/ffmpeg-bundled`）。轉碼在設 **`FFMPEG_BIN`**／**`FFPROBE_BIN`** 時用指定二進位，否則用 bundled。見 [設定變數一覽](#設定變數一覽)。
-
 啟動後可確認：
 
 ```bash
@@ -284,15 +282,10 @@ docker run --rm -p 5000:5000 \
 
 使用 **NVIDIA NVENC** 時，需將宿主機已編譯 NVENC 的 ffmpeg 掛載進容器，並傳入 GPU。宿主機需安裝 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)。
 
-**重要：** 請掛載到 **`ffmpeg-nvenc`**，不要覆蓋 `/usr/local/bin/ffmpeg`。yt-dlp 下載／合併固定使用映像檔內 **`ffmpeg-bundled`**；若覆蓋 `ffmpeg`，合併會失敗並出現「下載完成但找不到輸出檔案」。轉碼請設 `FFMPEG_BIN`／`FFPROBE_BIN`。
-
-宿主機 ffmpeg 通常為**動態連結**。需一併掛載其 shared libraries（Compose gpu profile 將 `/usr/lib/x86_64-linux-gnu` 掛到 `/usr/local/lib/ffmpeg-host`；設了 `FFMPEG_BIN` 時 app 會自動加入 `LD_LIBRARY_PATH`）。若仍出現 `libavdevice.so.*: cannot open shared object file`，在宿主執行 `ldd $(which ffmpeg)` 確認 lib 路徑並掛載，或設 `FFMPEG_LD_LIBRARY_PATH`（容器內路徑，冒號分隔）。
-
 宿主機檢查：
 
 ```bash
 ffmpeg -hide_banner -encoders | grep nvenc
-ldd "$(which ffmpeg)" | grep libav
 ```
 
 Compose（`docker-compose.example.yml` 的 gpu profile）：
@@ -300,7 +293,6 @@ Compose（`docker-compose.example.yml` 的 gpu profile）：
 ```bash
 export FFMPEG_HOST_PATH=/usr/bin/ffmpeg    # 依實際路徑調整
 export FFPROBE_HOST_PATH=/usr/bin/ffprobe
-export FFMPEG_LIB_HOST_PATH=/usr/lib/x86_64-linux-gnu   # 宿主 libav*.so 所在目錄
 docker compose --profile gpu up -d
 ```
 
@@ -310,12 +302,9 @@ docker compose --profile gpu up -d
 docker run --rm -p 5000:5000 \
   --gpus all \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
-  -e FFMPEG_BIN=/usr/local/bin/ffmpeg-nvenc \
-  -e FFPROBE_BIN=/usr/local/bin/ffprobe-nvenc \
   -e HW_ENCODER=h264_nvenc \
-  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg-nvenc:ro \
-  -v "$(which ffprobe)":/usr/local/bin/ffprobe-nvenc:ro \
-  -v /usr/lib/x86_64-linux-gnu:/usr/local/lib/ffmpeg-host:ro \
+  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg:ro \
+  -v "$(which ffprobe)":/usr/local/bin/ffprobe:ro \
   --env-file .env \
   -v "$(pwd)/temp:/app/temp" \
   mio9/bili2vrc:latest
@@ -426,14 +415,6 @@ curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
 | `DEFAULT_ENCODE_QUALITY` | `balanced` | `high`／`balanced`／`medium`／`small` |
 | `DEFAULT_OUTPUT_CODEC` | `av1` | 非保留原始時的 API 預設編碼（`av1`／`h264`／`h265`）。**UI** 仍預設保留原始 |
 | `YTDLP_JS_RUNTIME` | `auto` | `auto`（node → bun → deno）／`node`／`bun`／`deno` |
-| `FFMPEG_BUNDLED_BIN` | 空 | yt-dlp 合併／remux 與 MP4 驗證；映像預設 `/usr/local/bin/ffmpeg-bundled`，本機安裝則用 PATH 上的 `ffmpeg` |
-| `FFPROBE_BUNDLED_BIN` | 空 | 驗證用 bundled ffprobe；映像預設 `/usr/local/bin/ffprobe-bundled` |
-| `FFMPEG_BIN` | 空 | 轉碼／編碼用 ffmpeg；設為宿主掛載路徑（如 `/usr/local/bin/ffmpeg-nvenc`）時覆蓋 bundled，供 encode 與 hwaccel 偵測 |
-| `FFPROBE_BIN` | 空 | 轉碼用 ffprobe；未設時用 bundled，或 `FFMPEG_BIN` 以 `-nvenc` 結尾時自動配對 `*-ffprobe-nvenc` |
-| `FFMPEG_HOST_PATH` | `/usr/bin/ffmpeg` | **僅 Compose `gpu` profile** — 掛載到容器 `/usr/local/bin/ffmpeg-nvenc` 的宿主路徑 |
-| `FFPROBE_HOST_PATH` | `/usr/bin/ffprobe` | **僅 Compose `gpu` profile** — 掛載到容器 `/usr/local/bin/ffprobe-nvenc` 的宿主路徑 |
-| `FFMPEG_LIB_HOST_PATH` | `/usr/lib/x86_64-linux-gnu` | **僅 Compose `gpu` profile** — 宿主 lib 目錄掛到 `/usr/local/lib/ffmpeg-host`（動態 ffmpeg 用） |
-| `FFMPEG_LD_LIBRARY_PATH` | 空 | 轉碼 ffmpeg 用的額外容器路徑，會 prepend 到 `LD_LIBRARY_PATH`（冒號分隔）；設了 `FFMPEG_BIN` 且存在 `/usr/local/lib/ffmpeg-host` 時自動加入 |
 | `HOST` | `0.0.0.0` | 綁定位址 |
 | `PORT` | `5000` | HTTP 連接埠 |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt 靜態輸出目錄 |
@@ -460,7 +441,7 @@ curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
 | `src/bili2vrc/config.py` | 設定（R2、TTL、編碼、路徑）；載入 `.env` |
 | `src/bili2vrc/api/` | REST + SSE 路由（`/api/*`） |
 | `src/bili2vrc/services/` | 獲取格式、下載／上傳流程、任務控制 |
-| `src/bili2vrc/media/` | ffmpeg 轉碼、MP4 驗證／faststart；`ffmpeg_paths.py` 解析 bundled 與 transcode 二進位 |
+| `src/bili2vrc/media/` | ffmpeg 轉碼、MP4 驗證／faststart |
 | `src/bili2vrc/download/` | yt-dlp、Cookie、aria2c |
 | `src/bili2vrc/storage/r2.py` | R2 上傳、公開網址、過期清理 |
 | `src/bili2vrc/encoding/hwaccel.py` | 硬體編碼器偵測與 ffmpeg 參數 |
@@ -495,4 +476,3 @@ curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
 | 貼上讀不到剪貼簿 | 用 `http://127.0.0.1:5000` 或 HTTPS；區網 HTTP 請用 Ctrl+V 後備或手動貼上 |
 | HDR 過曝／灰階怪異 | 對 HDR 格式開啟 **HDR → SDR**，或換 **Mapping**（Mobius／BT.2390／Hable）。需 ffmpeg 含 **libplacebo** + Vulkan |
 | 1.0x 會重編碼嗎？ | 僅在**保留原始**且未開 HDR→SDR：不會（faststart + 驗證）。**AV1**／**H.264**／改倍速／HDR→SDR 一定重編碼 |
-| Docker NVENC：`libavdevice.so.*` 找不到 | 掛載宿主 ffmpeg **函式庫**（gpu profile：`FFMPEG_LIB_HOST_PATH` → `/usr/local/lib/ffmpeg-host`），或設 `FFMPEG_LD_LIBRARY_PATH`。宿主 ffmpeg 須與映像 glibc 相容 |

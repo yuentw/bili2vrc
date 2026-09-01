@@ -1,6 +1,6 @@
 [project]
 name = "bili2vrc"
-version = "0.2.7"
+version = "0.2.6"
 description = "Make Bilibili videos watchable with friends at speed"
 readme = "README.md"
 requires-python = ">=3.14"

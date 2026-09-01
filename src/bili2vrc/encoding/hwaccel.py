@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 from bili2vrc import config
-from bili2vrc.media.ffmpeg_paths import transcode_ffmpeg_bin, transcode_ffprobe_bin, transcode_subprocess_env
 
 logger = logging.getLogger("bili2vrchat.hwaccel")
 
@@ -449,13 +448,12 @@ def has_nvidia_gpu(gpus: list[str] | None = None) -> bool:
 def _list_ffmpeg_encoders() -> set[str]:
     try:
         result = subprocess.run(
-            [transcode_ffmpeg_bin(), "-hide_banner", "-encoders"],
+            ["ffmpeg", "-hide_banner", "-encoders"],
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
             timeout=15,
-            env=transcode_subprocess_env(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return set()
@@ -488,7 +486,6 @@ def _run_smoke(cmd: list[str]) -> tuple[bool, str]:
             encoding="utf-8",
             errors="replace",
             timeout=25,
-            env=transcode_subprocess_env(),
         )
         if result.returncode == 0:
             return True, ""
@@ -502,7 +499,7 @@ def _run_smoke(cmd: list[str]) -> tuple[bool, str]:
 
 def _smoke_test_encoder(encoder: VideoEncoder) -> tuple[bool, str]:
     base = [
-        transcode_ffmpeg_bin(),
+        "ffmpeg",
         "-hide_banner",
         "-loglevel", "error",
         *encoder.global_args,
@@ -743,7 +740,7 @@ def probe_video_fps(filepath: str) -> float:
     try:
         result = subprocess.run(
             [
-                transcode_ffprobe_bin(), "-v", "quiet",
+                "ffprobe", "-v", "quiet",
                 "-select_streams", "v:0",
                 "-show_entries", "stream=avg_frame_rate,r_frame_rate",
                 "-of", "json",
@@ -754,7 +751,6 @@ def probe_video_fps(filepath: str) -> float:
             encoding="utf-8",
             errors="replace",
             timeout=60,
-            env=transcode_subprocess_env(),
         )
         if result.returncode != 0:
             return 0.0
