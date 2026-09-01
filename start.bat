@@ -180,7 +180,7 @@ exit /b 0
 set "APP_VERSION="
 for /f "usebackq tokens=3 delims= " %%a in (`findstr /b /c:"version = " "%~dp0pyproject.toml"`) do set "APP_VERSION=%%~a"
 if not defined APP_VERSION (
-  echo [bili2vrchat] 無法從 pyproject.toml 讀取 version。
+  echo [bili2vrchat] Could not read version from pyproject.toml.
   exit /b 1
 )
 
@@ -194,18 +194,18 @@ if exist "%DIST%\index.html" set "DIST_OK=1"
 if exist "%DIST%\200.html" set "DIST_OK=1"
 
 if "!DIST_OK!"=="1" if "!STAMP!"=="!APP_VERSION!" (
-  echo [bili2vrchat] 前端已是 !APP_VERSION!，略過建置。
+  echo [bili2vrchat] Frontend already !APP_VERSION!, skipping build.
   exit /b 0
 )
 
 if "!DIST_OK!"=="1" (
-  echo [bili2vrchat] 前端版本不符（建置：!STAMP!，目前：!APP_VERSION!）。是否執行 bun install 與 bun run generate？
+  echo [bili2vrchat] Frontend version mismatch (built: !STAMP!, current: !APP_VERSION!). Run bun install and bun run generate?
 ) else (
-  echo [bili2vrchat] 前端尚未建置。是否執行 bun install 與 bun run generate？
+  echo [bili2vrchat] Frontend not built. Run bun install and bun run generate?
 )
 call :confirm_install
 if errorlevel 1 exit /b 1
-echo [bili2vrchat] 正在建置前端 ...
+echo [bili2vrchat] Building frontend ...
 pushd "%~dp0frontend" || exit /b 1
 call bun install
 if errorlevel 1 (
@@ -223,7 +223,7 @@ popd
 
 if exist "%DIST%\index.html" goto :frontend_stamp
 if exist "%DIST%\200.html" goto :frontend_stamp
-echo [bili2vrchat] 建置完成但仍缺少 frontend/.output/public。
+echo [bili2vrchat] Frontend build finished but .output\public is still missing.
 exit /b 1
 
 :frontend_stamp
