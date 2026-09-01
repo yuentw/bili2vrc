@@ -9,6 +9,7 @@ import time
 
 from bili2vrc import config
 from bili2vrc.constants import clamp_playback_speed
+from bili2vrc.media.ffmpeg_paths import transcode_ffmpeg_bin
 from bili2vrc.encoding import hwaccel
 from bili2vrc.media.mp4 import probe_has_audio
 
@@ -204,7 +205,7 @@ def _transcode_video_try(
         out_fps = hwaccel.resolve_output_fps(source_fps)
         decode_args = hwaccel.decode_hwaccel_args(encoder)
         cmd = [
-            "ffmpeg", "-hide_banner", "-y",
+            transcode_ffmpeg_bin(), "-hide_banner", "-y",
             *encoder.global_args,
             *decode_args,
             "-i", src,
@@ -269,7 +270,7 @@ def _transcode_video_try(
                 encoder.name, err_tail or "(no output)",
             )
             cmd_no_hw = [
-                "ffmpeg", "-hide_banner", "-y",
+                transcode_ffmpeg_bin(), "-hide_banner", "-y",
                 *encoder.global_args,
                 "-i", src,
             ]

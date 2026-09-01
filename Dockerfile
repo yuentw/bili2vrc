@@ -9,8 +9,10 @@ FROM python:3.14-slim-trixie
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY --from=node:26-bookworm-slim /usr/local/bin/node /usr/local/bin/node
-COPY --from=mwader/static-ffmpeg:8.1.2 /ffmpeg /usr/local/bin/ffmpeg
-COPY --from=mwader/static-ffmpeg:8.1.2 /ffprobe /usr/local/bin/ffprobe
+COPY --from=mwader/static-ffmpeg:8.1.2 /ffmpeg /usr/local/bin/ffmpeg-bundled
+COPY --from=mwader/static-ffmpeg:8.1.2 /ffprobe /usr/local/bin/ffprobe-bundled
+RUN ln -sf ffmpeg-bundled /usr/local/bin/ffmpeg \
+    && ln -sf ffprobe-bundled /usr/local/bin/ffprobe
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

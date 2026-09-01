@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 from bili2vrc import config
+from bili2vrc.media.ffmpeg_paths import transcode_ffmpeg_bin, transcode_ffprobe_bin
 
 logger = logging.getLogger("bili2vrchat.hwaccel")
 
@@ -448,7 +449,7 @@ def has_nvidia_gpu(gpus: list[str] | None = None) -> bool:
 def _list_ffmpeg_encoders() -> set[str]:
     try:
         result = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"],
+            [transcode_ffmpeg_bin(), "-hide_banner", "-encoders"],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -499,7 +500,7 @@ def _run_smoke(cmd: list[str]) -> tuple[bool, str]:
 
 def _smoke_test_encoder(encoder: VideoEncoder) -> tuple[bool, str]:
     base = [
-        "ffmpeg",
+        transcode_ffmpeg_bin(),
         "-hide_banner",
         "-loglevel", "error",
         *encoder.global_args,
@@ -740,7 +741,7 @@ def probe_video_fps(filepath: str) -> float:
     try:
         result = subprocess.run(
             [
-                "ffprobe", "-v", "quiet",
+                transcode_ffprobe_bin(), "-v", "quiet",
                 "-select_streams", "v:0",
                 "-show_entries", "stream=avg_frame_rate,r_frame_rate",
                 "-of", "json",

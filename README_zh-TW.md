@@ -282,6 +282,8 @@ docker run --rm -p 5000:5000 \
 
 使用 **NVIDIA NVENC** 時，需將宿主機已編譯 NVENC 的 ffmpeg 掛載進容器，並傳入 GPU。宿主機需安裝 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)。
 
+**重要：** 請掛載到 **`ffmpeg-nvenc`**，不要覆蓋 `/usr/local/bin/ffmpeg`。yt-dlp 下載／合併固定使用映像檔內 **`ffmpeg-bundled`**；若覆蓋 `ffmpeg`，合併會失敗並出現「下載完成但找不到輸出檔案」。轉碼請設 `FFMPEG_BIN`／`FFPROBE_BIN`。
+
 宿主機檢查：
 
 ```bash
@@ -302,9 +304,11 @@ docker compose --profile gpu up -d
 docker run --rm -p 5000:5000 \
   --gpus all \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
+  -e FFMPEG_BIN=/usr/local/bin/ffmpeg-nvenc \
+  -e FFPROBE_BIN=/usr/local/bin/ffprobe-nvenc \
   -e HW_ENCODER=h264_nvenc \
-  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg:ro \
-  -v "$(which ffprobe)":/usr/local/bin/ffprobe:ro \
+  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg-nvenc:ro \
+  -v "$(which ffprobe)":/usr/local/bin/ffprobe-nvenc:ro \
   --env-file .env \
   -v "$(pwd)/temp:/app/temp" \
   mio9/bili2vrc:latest

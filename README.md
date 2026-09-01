@@ -282,6 +282,8 @@ docker run --rm -p 5000:5000 \
 
 To use **NVIDIA NVENC**, bind-mount a host ffmpeg built with NVENC and pass the GPU into the container. Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on the host.
 
+**Important:** Mount host ffmpeg as **`ffmpeg-nvenc`**, not over `/usr/local/bin/ffmpeg`. yt-dlp uses the bundled **`ffmpeg-bundled`** for download/merge; replacing `ffmpeg` breaks merge and causes「下載完成但找不到輸出檔案」. Set `FFMPEG_BIN` / `FFPROBE_BIN` for transcode only.
+
 Host check:
 
 ```bash
@@ -302,9 +304,11 @@ Or `docker run`:
 docker run --rm -p 5000:5000 \
   --gpus all \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
+  -e FFMPEG_BIN=/usr/local/bin/ffmpeg-nvenc \
+  -e FFPROBE_BIN=/usr/local/bin/ffprobe-nvenc \
   -e HW_ENCODER=h264_nvenc \
-  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg:ro \
-  -v "$(which ffprobe)":/usr/local/bin/ffprobe:ro \
+  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg-nvenc:ro \
+  -v "$(which ffprobe)":/usr/local/bin/ffprobe-nvenc:ro \
   --env-file .env \
   -v "$(pwd)/temp:/app/temp" \
   mio9/bili2vrc:latest
