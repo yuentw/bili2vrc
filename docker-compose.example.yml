@@ -1,0 +1,40 @@
+# bili2vrchat — example Compose file
+#   cp docker-compose.example.yml docker-compose.yml
+#   cp .env.example .env   # fill in R2 / S3 credentials
+#   docker compose up -d
+#
+# Transcode: the image bundles static ffmpeg (no NVENC / QSV / VAAPI / libplacebo).
+# Default service uses CPU software encoders only (libx264 / libx265 / libsvtav1).
+# For NVIDIA NVENC, use the gpu profile — see README "Docker + GPU / NVENC".
+
+services:
+  bili2vrc:
+    image: mio9/bili2vrc:latest
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - ./temp:/app/temp
+    restart: unless-stopped
+
+  # Optional: NVIDIA NVENC via host ffmpeg (Linux amd64 + NVIDIA Container Toolkit).
+  #   1. Host: ffmpeg -encoders | grep nvenc  (install if missing — see start.sh / README)
+  #   2. Set FFMPEG_HOST_PATH / FFPROBE_HOST_PATH below to your host binary paths
+  #   3. docker compose --profile gpu up -d
+  bili2vrc-gpu:
+    profiles: [gpu]
+    image: mio9/bili2vrc:latest
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+      HW_ENCODER: h264_nvenc
+    gpus: all
+    volumes:
+      - ./temp:/app/temp
+      - ${FFMPEG_HOST_PATH:-/usr/bin/ffmpeg}:/usr/local/bin/ffmpeg:ro
+      - ${FFPROBE_HOST_PATH:-/usr/bin/ffprobe}:/usr/local/bin/ffprobe:ro
+    restart: unless-stopped

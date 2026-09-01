@@ -246,20 +246,80 @@ cd frontend && bun run dev   # :3000 — 熱更新；/api/* → :5000
 # 或：docker build -t bili2vrchat .
 ```
 
-執行：
+#### 容器內轉碼
+
+映像檔內建 **靜態 ffmpeg**（可攜、多架構）。**不含** GPU 編碼器（無 NVENC、QSV、VAAPI）且**不含 libplacebo**（HDR→SDR 色調映射）。
+
+若**未**掛載本機 ffmpeg，轉碼僅使用 **CPU 軟體編碼器** — 依輸出格式為 `libx264`、`libx265` 或 `libsvtav1`。預設映像檔內 `HW_ENCODER=auto` **不會**選到 NVENC。
+
+啟動後可確認：
+
+```bash
+curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
+# 預期 encoder 為 "libx264"，fallback true
+```
+
+#### Docker Compose（建議）
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+cp .env.example .env            # 填入 R2／S3 憑證
+docker compose up -d
+```
+
+開啟 `http://localhost:5000`。暫存檔在宿主機 `./temp`。
+
+#### docker run
 
 ```bash
 docker run --rm -p 5000:5000 \
-  -e CF_ACCOUNT_ID=your-account-id \
-  -e R2_ACCESS_KEY_ID=your-access-key-id \
-  -e R2_SECRET_ACCESS_KEY=your-secret-access-key \
-  -e R2_BUCKET_NAME=my-vrchat-videos \
-  -e R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev \
-  -v bili2vrchat-temp:/app/temp \
-  bili2vrchat
+  --env-file .env \
+  -v "$(pwd)/temp:/app/temp" \
+  mio9/bili2vrc:latest
 ```
 
-映像檔以 Bun 建置 Nuxt 前端；Python 依賴由 `uv sync`（`uv.lock`）安裝；`CMD` 為 `uv run app.py`。含 `ffmpeg`、`aria2`、`nodejs`。R2 憑證請用 `-e` 或 `--env-file` 傳入，勿寫進映像檔。
+#### Docker + GPU／NVENC（進階）
+
+使用 **NVIDIA NVENC** 時，需將宿主機已編譯 NVENC 的 ffmpeg 掛載進容器，並傳入 GPU。宿主機需安裝 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)。
+
+宿主機檢查：
+
+```bash
+ffmpeg -hide_banner -encoders | grep nvenc
+```
+
+Compose（`docker-compose.example.yml` 的 gpu profile）：
+
+```bash
+export FFMPEG_HOST_PATH=/usr/bin/ffmpeg    # 依實際路徑調整
+export FFPROBE_HOST_PATH=/usr/bin/ffprobe
+docker compose --profile gpu up -d
+```
+
+或 `docker run`：
+
+```bash
+docker run --rm -p 5000:5000 \
+  --gpus all \
+  -e NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
+  -e HW_ENCODER=h264_nvenc \
+  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg:ro \
+  -v "$(which ffprobe)":/usr/local/bin/ffprobe:ro \
+  --env-file .env \
+  -v "$(pwd)/temp:/app/temp" \
+  mio9/bili2vrc:latest
+```
+
+確認 NVENC：
+
+```bash
+curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
+# 預期 encoder 為 "h264_nvenc"，fallback false
+```
+
+宿主機 ffmpeg 須與 Debian 基底** glibc 相容**（Linux amd64 動態連結版較穩）。HDR→SDR 另需宿主機 ffmpeg 含 **libplacebo** 與 Vulkan — 掛載方式相同。
+
+映像檔以 Bun 建置 Nuxt 前端；Python 依賴由 `uv sync`（`uv.lock`）安裝；`CMD` 為 `uv run app.py`。含靜態 **ffmpeg**（僅軟體轉碼）、**aria2**、**nodejs**。R2／S3 憑證請用 `--env-file` 傳入，勿寫進映像檔。
 
 ---
 
@@ -391,6 +451,7 @@ docker run --rm -p 5000:5000 \
 | `requirements.txt` | 舊版 pip 清單（對應主要依賴） |
 | `start.ps1`／`start.bat`／`start.sh` | 自動安裝 uv／ffmpeg／Bun、更新 yt-dlp、建置前端、`uv run app.py` |
 | `build-image.sh` | Docker 映像建置輔助 |
+| `docker-compose.example.yml` | Compose 範例（預設軟體轉碼；可選 `gpu` profile 使用 NVENC） |
 | `Dockerfile` | 多階段：Bun 前端 + `uv sync` + Python 執行環境 |
 | `userscripts/bili2vrc-bridge.user.js` | 可選 Tampermonkey 橋接（Bilibili／YouTube → bili2vrc） |
 | `temp/` | 下載／轉碼暫存（已 gitignore） |

@@ -246,20 +246,80 @@ Build:
 # or: docker build -t bili2vrchat .
 ```
 
-Run:
+#### Transcode in container
+
+The image includes **static ffmpeg** (portable, multi-arch). It has **no GPU encoders** (no NVENC, QSV, VAAPI) and **no libplacebo** (HDR→SDR tonemap).
+
+If you **do not** mount your own ffmpeg, transcode uses **CPU software encoders only** — `libx264`, `libx265`, or `libsvtav1` depending on output codec. `HW_ENCODER=auto` will not select NVENC inside the default image.
+
+Verify after start:
+
+```bash
+curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
+# expect encoder "libx264", fallback true
+```
+
+#### Docker Compose (recommended)
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+cp .env.example .env            # fill in R2 / S3 credentials
+docker compose up -d
+```
+
+Open `http://localhost:5000`. Temp files are stored in `./temp` on the host.
+
+#### docker run
 
 ```bash
 docker run --rm -p 5000:5000 \
-  -e CF_ACCOUNT_ID=your-account-id \
-  -e R2_ACCESS_KEY_ID=your-access-key-id \
-  -e R2_SECRET_ACCESS_KEY=your-secret-access-key \
-  -e R2_BUCKET_NAME=my-vrchat-videos \
-  -e R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev \
-  -v bili2vrchat-temp:/app/temp \
-  bili2vrchat
+  --env-file .env \
+  -v "$(pwd)/temp:/app/temp" \
+  mio9/bili2vrc:latest
 ```
 
-Image: Bun builds Nuxt frontend; Python deps via `uv sync` from `uv.lock`; `CMD` is `uv run app.py`. Includes `ffmpeg`, `aria2`, `nodejs`. Pass R2 credentials via `-e` or `--env-file` (do not bake secrets into the image).
+#### Docker + GPU / NVENC (advanced)
+
+To use **NVIDIA NVENC**, bind-mount a host ffmpeg built with NVENC and pass the GPU into the container. Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on the host.
+
+Host check:
+
+```bash
+ffmpeg -hide_banner -encoders | grep nvenc
+```
+
+Compose (gpu profile in `docker-compose.example.yml`):
+
+```bash
+export FFMPEG_HOST_PATH=/usr/bin/ffmpeg    # adjust if needed
+export FFPROBE_HOST_PATH=/usr/bin/ffprobe
+docker compose --profile gpu up -d
+```
+
+Or `docker run`:
+
+```bash
+docker run --rm -p 5000:5000 \
+  --gpus all \
+  -e NVIDIA_DRIVER_CAPABILITIES=compute,video,utility \
+  -e HW_ENCODER=h264_nvenc \
+  -v "$(which ffmpeg)":/usr/local/bin/ffmpeg:ro \
+  -v "$(which ffprobe)":/usr/local/bin/ffprobe:ro \
+  --env-file .env \
+  -v "$(pwd)/temp:/app/temp" \
+  mio9/bili2vrc:latest
+```
+
+Verify NVENC:
+
+```bash
+curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
+# expect encoder "h264_nvenc", fallback false
+```
+
+Host ffmpeg must be **glibc-compatible** with the Debian-based image (Linux amd64 dynamic builds work best). HDR→SDR tonemap additionally requires a host ffmpeg with **libplacebo** and Vulkan — mount the same way.
+
+Image: Bun builds Nuxt frontend; Python deps via `uv sync` from `uv.lock`; `CMD` is `uv run app.py`. Includes static **ffmpeg** (software transcode only), **aria2**, **nodejs**. Pass R2/S3 credentials via `--env-file` (do not bake secrets into the image).
 
 ---
 
@@ -391,6 +451,7 @@ Login cookies for restricted videos are stored in **browser localStorage**, not 
 | `requirements.txt` | Legacy pip list (mirror of main deps) |
 | `start.ps1` / `start.bat` / `start.sh` | Auto-install uv / ffmpeg / Bun, refresh yt-dlp, build frontend, `uv run app.py` |
 | `build-image.sh` | Docker image build helper |
+| `docker-compose.example.yml` | Example Compose (software transcode default; optional `gpu` profile for NVENC) |
 | `Dockerfile` | Multi-stage: Bun frontend + `uv sync` + Python runtime |
 | `userscripts/bili2vrc-bridge.user.js` | Optional Tampermonkey bridge (Bilibili / YouTube → bili2vrc) |
 | `temp/` | Download/transcode scratch (gitignored) |
