@@ -165,7 +165,7 @@ export R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 - 找不到 `ffmpeg`／`ffprobe` 時安裝 ffmpeg（見 [前置依賴](#前置依賴)）
 - 用 `uv lock --upgrade-package yt-dlp` 更新 **yt-dlp**（失敗則沿用現有版本）
 - 找不到 **Bun** 時安裝到專案 `.bun`
-- 缺少 `frontend/.output/public` 時建置前端（`bun install` + `bun run generate`）
+- 缺少 `frontend/.output/public`，**或** `pyproject.toml` 版本與上次前端建置戳不同時，才建置前端（`bun install` + `bun run generate`）
 - 然後執行 `uv run app.py`
 
 ### Windows

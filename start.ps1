@@ -233,12 +233,43 @@ function Test-FrontendBuilt {
     return (Test-Path (Join-Path $dist 'index.html')) -or (Test-Path (Join-Path $dist '200.html'))
 }
 
+function Get-AppVersion {
+    $pyproject = Join-Path $Root 'pyproject.toml'
+    $match = Select-String -Path $pyproject -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+    if (-not $match) {
+        Write-Error '[bili2vrchat] 無法從 pyproject.toml 讀取 version。'
+    }
+    return $match.Matches[0].Groups[1].Value
+}
+
+function Get-FrontendStamp {
+    $stampPath = Join-Path $Root 'frontend\.output\public\.bili2vrc-version'
+    if (-not (Test-Path $stampPath)) {
+        return ''
+    }
+    return (Get-Content -Path $stampPath -Raw).Trim()
+}
+
+function Write-FrontendStamp {
+    param([string]$Version)
+    $stampPath = Join-Path $Root 'frontend\.output\public\.bili2vrc-version'
+    Set-Content -Path $stampPath -Value $Version -NoNewline -Encoding ascii
+}
+
 function Ensure-Frontend {
-    if (Test-FrontendBuilt) {
+    $appVersion = Get-AppVersion
+    $stamp = Get-FrontendStamp
+    if ((Test-FrontendBuilt) -and ($stamp -eq $appVersion)) {
+        Write-Host "[bili2vrchat] 前端已是 $appVersion，略過建置。"
         return
     }
 
-    Confirm-Install '[bili2vrchat] 前端尚未建置。是否執行 bun install 與 bun run generate？'
+    $reason = if (-not (Test-FrontendBuilt)) {
+        '前端尚未建置'
+    } else {
+        "前端版本不符（建置：$stamp，目前：$appVersion）"
+    }
+    Confirm-Install "[bili2vrchat] $reason。是否執行 bun install 與 bun run generate？"
     Write-Host '[bili2vrchat] 正在建置前端 ...'
     Push-Location (Join-Path $Root 'frontend')
     try {
@@ -258,6 +289,7 @@ function Ensure-Frontend {
     if (-not (Test-FrontendBuilt)) {
         Write-Error '[bili2vrchat] 建置完成但仍缺少 frontend/.output/public。'
     }
+    Write-FrontendStamp $appVersion
 }
 
 Write-Host '[bili2vrchat] 啟動中...'

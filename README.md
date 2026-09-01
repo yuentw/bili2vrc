@@ -165,7 +165,7 @@ export R2_PUBLIC_BASE_URL=https://pub-xxxx.r2.dev
 - Install **ffmpeg** if `ffmpeg` / `ffprobe` are missing (see [Prerequisites](#prerequisites))
 - Upgrade **yt-dlp** via `uv lock --upgrade-package yt-dlp` (keeps the existing version if that fails)
 - Install **Bun** into project `.bun` if missing
-- Build the frontend (`bun install` + `bun run generate`) if `frontend/.output/public` is missing
+- Build the frontend (`bun install` + `bun run generate`) if `frontend/.output/public` is missing, **or** if `pyproject.toml` version differs from the last frontend build stamp
 - Then run `uv run app.py`
 
 ### Windows

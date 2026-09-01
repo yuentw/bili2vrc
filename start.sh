@@ -183,11 +183,29 @@ ensure_bun() {
 
 ensure_frontend() {
   local dist="$ROOT/frontend/.output/public"
-  if [[ -f "$dist/index.html" || -f "$dist/200.html" ]]; then
+  local stamp_file="$dist/.bili2vrc-version"
+  local app_version stamp=""
+
+  app_version="$(grep -E '^version = "' "$ROOT/pyproject.toml" | head -n1 | sed -E 's/^version = "([^"]+)".*/\1/')"
+  if [[ -z "$app_version" ]]; then
+    echo "[bili2vrchat] 無法從 pyproject.toml 讀取 version。" >&2
+    exit 1
+  fi
+
+  if [[ -f "$stamp_file" ]]; then
+    stamp="$(tr -d '[:space:]' < "$stamp_file")"
+  fi
+
+  if { [[ -f "$dist/index.html" ]] || [[ -f "$dist/200.html" ]]; } && [[ "$stamp" == "$app_version" ]]; then
+    echo "[bili2vrchat] 前端已是 ${app_version}，略過建置。"
     return 0
   fi
 
-  confirm_install "[bili2vrchat] 前端尚未建置。是否執行 bun install 與 bun run generate？"
+  local reason="前端尚未建置"
+  if [[ -f "$dist/index.html" || -f "$dist/200.html" ]]; then
+    reason="前端版本不符（建置：${stamp}，目前：${app_version}）"
+  fi
+  confirm_install "[bili2vrchat] ${reason}。是否執行 bun install 與 bun run generate？"
   echo "[bili2vrchat] 正在建置前端 ..."
   (
     cd "$ROOT/frontend"
@@ -199,6 +217,7 @@ ensure_frontend() {
     echo "[bili2vrchat] 建置完成但仍缺少 frontend/.output/public。" >&2
     exit 1
   fi
+  printf '%s' "$app_version" > "$stamp_file"
 }
 
 ensure_uv
