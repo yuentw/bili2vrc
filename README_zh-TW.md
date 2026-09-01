@@ -252,6 +252,8 @@ cd frontend && bun run dev   # :3000 — 熱更新；/api/* → :5000
 
 若**未**掛載本機 ffmpeg，轉碼僅使用 **CPU 軟體編碼器** — 依輸出格式為 `libx264`、`libx265` 或 `libsvtav1`。預設映像檔內 `HW_ENCODER=auto` **不會**選到 NVENC。
 
+**ffmpeg 路徑：** yt-dlp 合併固定用 **`FFMPEG_BUNDLED_BIN`**（映像預設 `/usr/local/bin/ffmpeg-bundled`）。轉碼在設 **`FFMPEG_BIN`**／**`FFPROBE_BIN`** 時用指定二進位，否則用 bundled。見 [設定變數一覽](#設定變數一覽)。
+
 啟動後可確認：
 
 ```bash
@@ -419,6 +421,12 @@ curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
 | `DEFAULT_ENCODE_QUALITY` | `balanced` | `high`／`balanced`／`medium`／`small` |
 | `DEFAULT_OUTPUT_CODEC` | `av1` | 非保留原始時的 API 預設編碼（`av1`／`h264`／`h265`）。**UI** 仍預設保留原始 |
 | `YTDLP_JS_RUNTIME` | `auto` | `auto`（node → bun → deno）／`node`／`bun`／`deno` |
+| `FFMPEG_BUNDLED_BIN` | 空 | yt-dlp 合併／remux 與 MP4 驗證；映像預設 `/usr/local/bin/ffmpeg-bundled`，本機安裝則用 PATH 上的 `ffmpeg` |
+| `FFPROBE_BUNDLED_BIN` | 空 | 驗證用 bundled ffprobe；映像預設 `/usr/local/bin/ffprobe-bundled` |
+| `FFMPEG_BIN` | 空 | 轉碼／編碼用 ffmpeg；設為宿主掛載路徑（如 `/usr/local/bin/ffmpeg-nvenc`）時覆蓋 bundled，供 encode 與 hwaccel 偵測 |
+| `FFPROBE_BIN` | 空 | 轉碼用 ffprobe；未設時用 bundled，或 `FFMPEG_BIN` 以 `-nvenc` 結尾時自動配對 `*-ffprobe-nvenc` |
+| `FFMPEG_HOST_PATH` | `/usr/bin/ffmpeg` | **僅 Compose `gpu` profile** — 掛載到容器 `/usr/local/bin/ffmpeg-nvenc` 的宿主路徑 |
+| `FFPROBE_HOST_PATH` | `/usr/bin/ffprobe` | **僅 Compose `gpu` profile** — 掛載到容器 `/usr/local/bin/ffprobe-nvenc` 的宿主路徑 |
 | `HOST` | `0.0.0.0` | 綁定位址 |
 | `PORT` | `5000` | HTTP 連接埠 |
 | `FRONTEND_DIST` | `frontend/.output/public` | Nuxt 靜態輸出目錄 |
@@ -445,7 +453,7 @@ curl -s 'http://localhost:5000/api/hwaccel-status?codec=h264' | jq .
 | `src/bili2vrc/config.py` | 設定（R2、TTL、編碼、路徑）；載入 `.env` |
 | `src/bili2vrc/api/` | REST + SSE 路由（`/api/*`） |
 | `src/bili2vrc/services/` | 獲取格式、下載／上傳流程、任務控制 |
-| `src/bili2vrc/media/` | ffmpeg 轉碼、MP4 驗證／faststart |
+| `src/bili2vrc/media/` | ffmpeg 轉碼、MP4 驗證／faststart；`ffmpeg_paths.py` 解析 bundled 與 transcode 二進位 |
 | `src/bili2vrc/download/` | yt-dlp、Cookie、aria2c |
 | `src/bili2vrc/storage/r2.py` | R2 上傳、公開網址、過期清理 |
 | `src/bili2vrc/encoding/hwaccel.py` | 硬體編碼器偵測與 ffmpeg 參數 |
