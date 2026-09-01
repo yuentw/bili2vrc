@@ -199,14 +199,16 @@ if "!DIST_OK!"=="1" if "!STAMP!"=="!APP_VERSION!" (
 )
 
 if "!DIST_OK!"=="1" (
-  echo [bili2vrchat] Frontend version mismatch (built: !STAMP!, current: !APP_VERSION!). Run bun install and bun run generate?
+  echo [bili2vrchat] Frontend version mismatch: built !STAMP!, current !APP_VERSION!.
+  echo [bili2vrchat] Run bun install and bun run generate?
 ) else (
   echo [bili2vrchat] Frontend not built. Run bun install and bun run generate?
 )
 call :confirm_install
 if errorlevel 1 exit /b 1
 echo [bili2vrchat] Building frontend ...
-pushd "%~dp0frontend" || exit /b 1
+pushd "%~dp0frontend"
+if errorlevel 1 exit /b 1
 call bun install
 if errorlevel 1 (
   popd
