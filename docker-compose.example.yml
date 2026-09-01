@@ -38,4 +38,6 @@ services:
       - ./temp:/app/temp
       - ${FFMPEG_HOST_PATH:-/usr/bin/ffmpeg}:/usr/local/bin/ffmpeg-nvenc:ro
       - ${FFPROBE_HOST_PATH:-/usr/bin/ffprobe}:/usr/local/bin/ffprobe-nvenc:ro
+      # Host ffmpeg is dynamically linked — mount its libs (see README).
+      - ${FFMPEG_LIB_HOST_PATH:-/usr/lib/x86_64-linux-gnu}:/usr/local/lib/ffmpeg-host:ro
     restart: unless-stopped

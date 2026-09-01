@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 from bili2vrc import config
-from bili2vrc.media.ffmpeg_paths import transcode_ffmpeg_bin, transcode_ffprobe_bin
+from bili2vrc.media.ffmpeg_paths import transcode_ffmpeg_bin, transcode_ffprobe_bin, transcode_subprocess_env
 
 logger = logging.getLogger("bili2vrchat.hwaccel")
 
@@ -455,6 +455,7 @@ def _list_ffmpeg_encoders() -> set[str]:
             encoding="utf-8",
             errors="replace",
             timeout=15,
+            env=transcode_subprocess_env(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return set()
@@ -487,6 +488,7 @@ def _run_smoke(cmd: list[str]) -> tuple[bool, str]:
             encoding="utf-8",
             errors="replace",
             timeout=25,
+            env=transcode_subprocess_env(),
         )
         if result.returncode == 0:
             return True, ""
@@ -752,6 +754,7 @@ def probe_video_fps(filepath: str) -> float:
             encoding="utf-8",
             errors="replace",
             timeout=60,
+            env=transcode_subprocess_env(),
         )
         if result.returncode != 0:
             return 0.0
