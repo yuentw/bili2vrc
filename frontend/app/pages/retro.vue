@@ -555,6 +555,9 @@ const catColorClass = computed(() => {
         </div>
 
         <footer class="pos-footer">
+          <div v-if="app.queueLabel" class="pos-queue-badge">
+            {{ app.queueLabel }}
+          </div>
           <button
             type="button"
             class="pos-btn pos-btn-blue"
@@ -566,7 +569,7 @@ const catColorClass = computed(() => {
           <button
             type="button"
             class="pos-btn pos-btn-red"
-            :disabled="!app.selectedFormat || app.processLoading"
+            :disabled="!app.selectedFormat || app.processLoading || app.queueFull"
             @click="app.startProcess(true)"
           >
             {{ app.processLoading ? '處理中…' : '下載並上傳' }}
@@ -955,6 +958,15 @@ const catColorClass = computed(() => {
   text-align: center;
   font-size: 13px;
   color: #5a4a30;
+}
+
+.retro-app .pos-queue-badge {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+  color: #5a4a30;
+  margin-bottom: 2px;
 }
 
 .retro-app .pos-check-label {

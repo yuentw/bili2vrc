@@ -384,6 +384,7 @@ docker run --rm -p 5000:5000 \
 | `LOG_LEVEL` | `INFO` | Python 日誌等級 |
 | `DISABLE_ARIA2C` | 關 | `1`／`true` 停用 aria2c |
 | `COOKIE_MAX_BYTES` | `65536` | 每次請求 Cookie 大小上限 |
+| `MAX_PROCESS_QUEUE` | `5` | 進行中任務上限（執行中 + 等待）；滿時 `POST /api/process` 回 429 |
 
 ---
 

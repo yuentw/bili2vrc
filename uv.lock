@@ -34,7 +34,7 @@ wheels = [
 
 [[package]]
 name = "bili2vrc"
-version = "0.1.0"
+version = "0.2.7"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },

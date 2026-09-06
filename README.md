@@ -384,6 +384,7 @@ A **background thread** in this app scans the bucket every `R2_CLEANUP_INTERVAL`
 | `LOG_LEVEL` | `INFO` | Python log level |
 | `DISABLE_ARIA2C` | off | `1` / `true` to disable aria2c |
 | `COOKIE_MAX_BYTES` | `65536` | Max cookie payload per request |
+| `MAX_PROCESS_QUEUE` | `5` | Max in-flight process jobs (active + waiting); `POST /api/process` returns 429 when full |
 
 ---
 

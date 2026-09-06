@@ -23,6 +23,17 @@ type ProcessEvent = {
   step?: string
   message?: string
   url?: string
+  queue_count?: number
+  queue_max?: number
+  queue_position?: number
+}
+
+type QueueStatusResponse = {
+  active: boolean
+  queued_count: number
+  total_count: number
+  max_queue: number
+  available_slots: number
 }
 
 export function useBili2Vrc() {
@@ -210,6 +221,51 @@ export function useBili2Vrc() {
   const selInfoText = ref('尚未選擇格式')
   const showCancelBtn = ref(false)
   const cancelBtnDisabled = ref(false)
+
+  const queueCount = ref(0)
+  const queueMax = ref(5)
+  const queueAvailableSlots = ref(5)
+
+  let queuePollTimer: ReturnType<typeof setInterval> | null = null
+
+  function applyQueueStatus(data: Partial<QueueStatusResponse>) {
+    if (typeof data.total_count === 'number') queueCount.value = data.total_count
+    if (typeof data.max_queue === 'number') queueMax.value = data.max_queue
+    if (typeof data.available_slots === 'number') {
+      queueAvailableSlots.value = data.available_slots
+    }
+  }
+
+  function applyQueueFromEvent(event: ProcessEvent) {
+    if (typeof event.queue_count === 'number') queueCount.value = event.queue_count
+    if (typeof event.queue_max === 'number') queueMax.value = event.queue_max
+  }
+
+  async function fetchQueueStatus() {
+    try {
+      const response = await fetch('/api/queue-status')
+      if (!response.ok) return
+      applyQueueStatus(await response.json() as QueueStatusResponse)
+    } catch {
+      /* ignore poll errors */
+    }
+  }
+
+  const queueLabel = computed(() => {
+    if (queueCount.value <= 0) return ''
+    return `佇列 ${queueCount.value}/${queueMax.value}`
+  })
+
+  const queueFull = computed(() => queueAvailableSlots.value <= 0)
+
+  onMounted(() => {
+    fetchQueueStatus()
+    queuePollTimer = setInterval(fetchQueueStatus, 10000)
+  })
+
+  onUnmounted(() => {
+    if (queuePollTimer) clearInterval(queuePollTimer)
+  })
 
   const fmtCountLabel = computed(() => {
     if (!fmtCountShown.value) return ''
@@ -439,7 +495,9 @@ export function useBili2Vrc() {
       activeJobId.value = event.job_id || null
       showCancelBtn.value = true
       cancelBtnDisabled.value = false
+      applyQueueFromEvent(event)
     } else if (event.type === 'status') {
+      applyQueueFromEvent(event)
       const dotClass = event.step === 'done' ? 'done' : 'spin'
       setStatus(dotClass, event.message || '')
       if (retro) statusBarMsg.value = event.message || ''
@@ -449,6 +507,7 @@ export function useBili2Vrc() {
       showProgressBar.value = false
       setStatus('error', retro ? `❌ 錯誤：${event.message}` : `❌ ${event.message}`)
       if (retro) statusBarMsg.value = `錯誤：${event.message}`
+      fetchQueueStatus()
     } else if (event.type === 'result') {
       activeJobId.value = null
       showCancelBtn.value = false
@@ -460,6 +519,7 @@ export function useBili2Vrc() {
         setStatus('done', '完成')
       }
       showResult(event.url || '', retro)
+      fetchQueueStatus()
     }
   }
 
@@ -525,6 +585,26 @@ export function useBili2Vrc() {
           }),
         ),
       })
+      if (response.status === 429) {
+        const data = await response.json().catch(() => ({})) as {
+          error?: string
+          queue_count?: number
+          max_queue?: number
+        }
+        applyQueueStatus({
+          total_count: data.queue_count,
+          max_queue: data.max_queue,
+          available_slots: 0,
+        })
+        const message = data.error || `佇列已滿（${queueCount.value}/${queueMax.value}），請稍後再試`
+        setStatus('error', retro ? `❌ 錯誤：${message}` : `❌ ${message}`)
+        showProgressBar.value = false
+        if (retro) statusBarMsg.value = message
+        return
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
       await parseSseResponse(response, retro)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -536,6 +616,7 @@ export function useBili2Vrc() {
       showCancelBtn.value = false
       processLoading.value = false
       fetchLoading.value = false
+      fetchQueueStatus()
     }
   }
 
@@ -731,6 +812,12 @@ export function useBili2Vrc() {
     selInfoText,
     showCancelBtn,
     cancelBtnDisabled,
+    queueCount,
+    queueMax,
+    queueAvailableSlots,
+    queueLabel,
+    queueFull,
+    fetchQueueStatus,
     cookiePanelText,
     onUrlInput,
     loadHwaccelStatus,
