@@ -10,7 +10,8 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "requests>=2.31",
     "uvicorn[standard]>=0.30",
-    "yt-dlp>=2026.7.4",
+    "yt-dlp>=2026.8.19",
+    "yt-dlp-getpot-wpc>=1.1.2",
 ]
 
 [build-system]
