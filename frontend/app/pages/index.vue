@@ -288,10 +288,17 @@ function onResultVideoLoad() {
             </div>
 
             <div class="action-bar">
+              <div
+                v-if="app.queueLabel"
+                class="queue-badge"
+                :title="app.queueFull ? '佇列已滿，請稍後再試' : '目前處理佇列'"
+              >
+                {{ app.queueLabel }}
+              </div>
               <div class="action-bar-buttons">
                 <button
                   class="btn btn-primary btn-upload"
-                  :disabled="!app.selectedFormat || app.processLoading"
+                  :disabled="!app.selectedFormat || app.processLoading || app.queueFull"
                   @click="app.startProcess()"
                 >
                   下載並上傳
@@ -426,6 +433,7 @@ function onResultVideoLoad() {
         <div class="status-row">
           <div class="step-dot" :class="app.statusDotClass" id="stepDot" />
           <div id="statusMsg">{{ app.statusMsg }}</div>
+          <div v-if="app.queueLabel" class="queue-badge queue-badge-inline">{{ app.queueLabel }}</div>
         </div>
       </div>
       </aside>

@@ -11,6 +11,7 @@ from bili2vrc.download.ytdlp import get_js_runtime
 from bili2vrc.encoding import hwaccel
 from bili2vrc.logging_setup import setup_logging
 from bili2vrc.services.cleanup import start_r2_cleanup_thread
+from bili2vrc.services.job_queue import start_job_queue_worker
 from bili2vrc.web.middleware import PermissionsPolicyMiddleware
 from bili2vrc.web.static import resolve_frontend_file, warn_if_frontend_missing
 
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     )
     warn_if_frontend_missing()
     start_r2_cleanup_thread()
+    start_job_queue_worker()
     yield
 
 

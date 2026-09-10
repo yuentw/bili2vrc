@@ -585,6 +585,18 @@
       padding: 14px 18px;
       font-size: var(--fs-sm);
     }
+    .queue-badge {
+      display: inline-block;
+      font-size: var(--fs-sm);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      letter-spacing: 0.02em;
+    }
+    .queue-badge-inline {
+      margin-left: auto;
+      flex-shrink: 0;
+      align-self: center;
+    }
     #selInfo {
       font-size: var(--fs-xs);
       color: var(--muted);
@@ -608,6 +620,10 @@
       display: flex;
       align-items: flex-start;
       gap: 14px;
+    }
+    .status-row .queue-badge-inline {
+      margin-left: auto;
+      align-self: center;
     }
     .step-dot {
       width: 18px;

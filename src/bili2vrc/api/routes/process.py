@@ -1,8 +1,6 @@
 import json
 import logging
 import queue
-import secrets
-import threading
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -12,8 +10,7 @@ from bili2vrc.api.schemas import ProcessCancelRequest, ProcessRequest
 from bili2vrc.constants import clamp_playback_speed
 from bili2vrc.download.cookies import write_cookie_temp_file
 from bili2vrc.encoding import hwaccel
-from bili2vrc.services.pipeline import run_process
-from bili2vrc.services.process_controller import process_controller
+from bili2vrc.services.job_queue import job_queue
 from bili2vrc.utils.platform import detect_platform, validate_cookie_for_url
 
 logger = logging.getLogger("bili2vrchat")
@@ -22,7 +19,8 @@ router = APIRouter()
 
 
 def _sse_events(event_queue: queue.Queue, job_id: str):
-    yield f"data: {json.dumps({'type': 'started', 'job_id': job_id}, ensure_ascii=False)}\n\n"
+    started = {"type": "started", "job_id": job_id, **job_queue.queue_fields_for(job_id)}
+    yield f"data: {json.dumps(started, ensure_ascii=False)}\n\n"
     while True:
         try:
             msg = event_queue.get(timeout=120)
@@ -32,6 +30,11 @@ def _sse_events(event_queue: queue.Queue, job_id: str):
         if msg is None:
             break
         yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
+
+
+@router.get("/queue-status")
+def queue_status_route():
+    return job_queue.queue_status()
 
 
 @router.post("/process")
@@ -91,21 +94,48 @@ def process_route(body: ProcessRequest):
         scale_bitrate_with_speed, tonemap_hdr, tonemap_algorithm, url_platform, bool(cookie_content),
     )
 
-    event_queue: queue.Queue = queue.Queue()
-    job_id = secrets.token_hex(8)
-    cancel_event = process_controller.begin(job_id)
+    status = job_queue.queue_status()
+    if status["available_slots"] <= 0:
+        max_queue = status["max_queue"]
+        total = status["total_count"]
+        return JSONResponse(
+            {
+                "error": f"佇列已滿（{total}/{max_queue}），請稍後再試",
+                "queue_count": total,
+                "max_queue": max_queue,
+            },
+            status_code=429,
+        )
 
-    thread = threading.Thread(
-        target=run_process,
-        args=(
-            url, format_id, key_phrase, ttl, compat_mode, playback_speed, bitrate_kbps,
-            encode_quality, encode_mode, scale_bitrate_with_speed, output_codec, encode_crf,
-            tonemap_hdr, tonemap_algorithm, cookie_path, job_id,
-            cancel_event, event_queue,
-        ),
-        daemon=True,
+    event_queue: queue.Queue = queue.Queue()
+    job_id = job_queue.enqueue(
+        event_queue=event_queue,
+        url=url,
+        format_id=format_id,
+        key_phrase=key_phrase,
+        ttl=ttl,
+        compat_mode=compat_mode,
+        playback_speed=playback_speed,
+        bitrate_kbps=bitrate_kbps,
+        encode_quality=encode_quality,
+        encode_mode=encode_mode,
+        scale_bitrate_with_speed=scale_bitrate_with_speed,
+        output_codec=output_codec,
+        encode_crf=encode_crf,
+        tonemap_hdr=tonemap_hdr,
+        tonemap_algorithm=tonemap_algorithm,
+        cookie_path=cookie_path,
     )
-    thread.start()
+    if not job_id:
+        status = job_queue.queue_status()
+        return JSONResponse(
+            {
+                "error": f"佇列已滿（{status['total_count']}/{status['max_queue']}），請稍後再試",
+                "queue_count": status["total_count"],
+                "max_queue": status["max_queue"],
+            },
+            status_code=429,
+        )
 
     return StreamingResponse(
         _sse_events(event_queue, job_id),
@@ -121,7 +151,7 @@ def process_route(body: ProcessRequest):
 @router.post("/process/cancel")
 def process_cancel_route(body: ProcessCancelRequest):
     job_id = (body.job_id or "").strip() or None
-    if process_controller.cancel(job_id):
+    if job_queue.cancel(job_id):
         logger.info("process cancelled: job_id=%s", job_id)
         return {"ok": True}
     return JSONResponse({"ok": False, "error": "找不到進行中的任務"}, status_code=404)

@@ -230,5 +230,6 @@ DISABLE_HW_ACCEL = os.environ.get("DISABLE_HW_ACCEL", "").lower() in ("1", "true
 LOG_LEVEL    = os.environ.get("LOG_LEVEL", "INFO")
 COOKIE_MAX_BYTES = int(os.environ.get("COOKIE_MAX_BYTES", "65536"))
 DISABLE_ARIA2C   = os.environ.get("DISABLE_ARIA2C", "").lower() in ("1", "true", "yes", "on")
+MAX_PROCESS_QUEUE = max(1, int(os.environ.get("MAX_PROCESS_QUEUE", "5")))
 
 os.makedirs(TEMP_DIR, exist_ok=True)
