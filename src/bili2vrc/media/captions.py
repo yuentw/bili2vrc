@@ -15,8 +15,9 @@ CAPTION_FONT_SIZE_RATIO = 0.04
 CAPTION_MARGIN_RATIO = 0.08
 CAPTION_BOX_PADDING_RATIO = 0.008
 CAPTION_MIN_FONT_SIZE = 18
-# ASS alpha: 00 opaque, FF transparent. 0x40 ≈ 75% opaque black box.
-CAPTION_BOX_ALPHA = "40"
+# ASS alpha: 00 opaque, FF transparent. 0x4D ≈ 70% opaque, matching YouTube CC.
+# BorderStyle 4 is required; style 3 always paints a solid box.
+CAPTION_BOX_ALPHA = "4D"
 
 _LANG_CODE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$")
 _VTT_TIME = re.compile(
@@ -198,7 +199,7 @@ def write_youtube_style_ass(
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
         f"Style: YT,{font_name},{font_size},&H00FFFFFF,&H000000FF,&H00000000,"
-        f"{back},0,0,0,0,100,100,0,0,3,{box_pad},0,2,40,40,{margin_v},1\n"
+        f"{back},0,0,0,0,100,100,0,0,4,{box_pad},0,2,40,40,{margin_v},1\n"
         "\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
