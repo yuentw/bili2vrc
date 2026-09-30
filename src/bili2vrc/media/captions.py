@@ -224,16 +224,22 @@ def ffmpeg_subtitles_filter(ass_path: str) -> str:
 
 
 def _escape_filter_path(path: str) -> str:
+    """Escape a path for filter_complex.
+
+    The graph parser strips one backslash, then the subtitles option parser
+    still needs \\: so a Windows drive letter is not a new option.
+    """
     normalized = os.path.abspath(path).replace("\\", "/")
-    return (
+    escaped = (
         normalized
-        .replace("\\", r"\\")
         .replace(":", r"\:")
         .replace("'", r"\'")
         .replace(",", r"\,")
         .replace("[", r"\[")
         .replace("]", r"\]")
+        .replace(";", r"\;")
     )
+    return escaped.replace("\\", "\\\\")
 
 
 def _parse_vtt(path: str) -> list[tuple[float, float, str]]:
