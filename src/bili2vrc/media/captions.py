@@ -11,10 +11,10 @@ from bili2vrc import config
 
 logger = logging.getLogger("bili2vrchat")
 
-CAPTION_FONT_SIZE_RATIO = 0.04
+# Visible size tracks frame height (YouTube CC is about 5% of the picture).
+CAPTION_FONT_SIZE_RATIO = 0.05
 CAPTION_MARGIN_RATIO = 0.08
 CAPTION_BOX_PADDING_RATIO = 0.008
-CAPTION_MIN_FONT_SIZE = 18
 # ASS alpha: 00 opaque, FF transparent. 0x4D ≈ 70% opaque, matching YouTube CC.
 # BorderStyle 4 is required; style 3 always paints a solid box.
 CAPTION_BOX_ALPHA = "4D"
@@ -181,7 +181,7 @@ def write_youtube_style_ass(
     if not cues:
         return False
     font_name, _fonts_dir = resolve_caption_font()
-    font_size = max(CAPTION_MIN_FONT_SIZE, int(play_height * CAPTION_FONT_SIZE_RATIO))
+    font_size = max(1, int(play_height * CAPTION_FONT_SIZE_RATIO))
     margin_v = max(16, int(play_height * CAPTION_MARGIN_RATIO))
     box_pad = max(6, int(play_height * CAPTION_BOX_PADDING_RATIO))
     back = f"&H{CAPTION_BOX_ALPHA}000000"
@@ -198,8 +198,8 @@ def write_youtube_style_ass(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        f"Style: YT,{font_name},{font_size},&H00FFFFFF,&H000000FF,&H00000000,"
-        f"{back},0,0,0,0,100,100,0,0,4,{box_pad},0,2,40,40,{margin_v},1\n"
+        f"Style: YT,{font_name},{font_size},&H00FFFFFF,&H000000FF,&HFF000000,"
+        f"{back},0,0,0,0,100,100,0,0,4,0,{box_pad},2,40,40,{margin_v},1\n"
         "\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
