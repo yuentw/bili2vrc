@@ -16,6 +16,13 @@ import {
 } from './useEncodeCrf'
 
 const FORMAT_PAGE_SIZE = 4
+const CAPTION_LANG_PREFERENCE = ['zh-Hant', 'zh-TW', 'zh-Hans', 'zh-CN', 'zh', 'en']
+
+export interface CaptionTrack {
+  lang: string
+  name: string
+  automatic?: boolean
+}
 
 type ProcessEvent = {
   type: string
@@ -62,6 +69,10 @@ export function useBili2Vrc() {
   })
   const tonemapHdr = ref(false)
   const tonemapHdrHint = '將所選 HDR 轉成 SDR（需重編碼）'
+  const embedCaptions = ref(false)
+  const embedCaptionsHint = '燒進畫面，播放時無法關閉。會重新編碼，不再保留原始編碼'
+  const captionTracks = ref<CaptionTrack[]>([])
+  const captionLang = ref('')
   const tonemapAlgorithm = ref('mobius')
   const tonemapAlgorithmOptions = [
     { value: 'mobius', label: 'Mobius（預設）' },
@@ -70,13 +81,16 @@ export function useBili2Vrc() {
   ]
   const tonemapAlgorithmHint = '僅開啟 HDR→SDR 時套用（libplacebo）'
   const originalModeDisabled = computed(
-    () => playbackSpeedForcesReencode.value || tonemapHdr.value,
+    () => playbackSpeedForcesReencode.value || tonemapHdr.value || embedCaptions.value,
   )
   const showAdvancedEncoding = computed(() => outputMode.value !== 'original')
   const outputModeHint = computed(() => {
     if (outputMode.value === 'original') {
       if (tonemapHdr.value) {
         return 'HDR→SDR 需重編碼，無法保留原始編碼'
+      }
+      if (embedCaptions.value) {
+        return '嵌入字幕需重編碼，無法保留原始編碼'
       }
       return originalModeDisabled.value
         ? '非原速時無法保留原始編碼，已自動改為 AV1'
@@ -163,7 +177,7 @@ export function useBili2Vrc() {
   )
 
   function syncOutputModeForPlaybackConditions() {
-    if (tonemapHdr.value || playbackSpeedForcesReencode.value) {
+    if (tonemapHdr.value || playbackSpeedForcesReencode.value || embedCaptions.value) {
       outputMode.value = 'av1'
     } else {
       outputMode.value = 'original'
@@ -173,6 +187,8 @@ export function useBili2Vrc() {
   watch(playbackSpeed, syncOutputModeForPlaybackConditions)
 
   watch(tonemapHdr, syncOutputModeForPlaybackConditions)
+
+  watch(embedCaptions, syncOutputModeForPlaybackConditions)
 
   watch(encodeMode, (mode) => {
     const source = sourceBitrateKbps.value
@@ -353,6 +369,24 @@ export function useBili2Vrc() {
     fmtCountTotal.value = 0
     formatPage.value = 0
     selInfoText.value = '尚未選擇格式'
+    captionTracks.value = []
+    captionLang.value = ''
+    embedCaptions.value = false
+  }
+
+  function pickCaptionLang(tracks: CaptionTrack[]): string {
+    const codes = tracks.map((track) => track.lang)
+    for (const preferred of CAPTION_LANG_PREFERENCE) {
+      const exact = codes.find((code) => code.toLowerCase() === preferred.toLowerCase())
+      if (exact) return exact
+    }
+    const chinese = codes.find((code) => code.toLowerCase().startsWith('zh'))
+    return chinese || codes[0] || ''
+  }
+
+  function captionTrackLabel(track: CaptionTrack): string {
+    const name = track.name && track.name !== track.lang ? `${track.name} (${track.lang})` : track.lang
+    return track.automatic ? `${name}（自動產生）` : name
   }
 
   function applySourceBitrate(format: VideoFormat) {
@@ -462,6 +496,9 @@ export function useBili2Vrc() {
       }
 
       applyVideoMeta(data)
+      captionTracks.value = Array.isArray(data.captions) ? data.captions : []
+      captionLang.value = pickCaptionLang(captionTracks.value)
+      if (!captionTracks.value.length) embedCaptions.value = false
       const formats = data.formats || []
       if (!formats.length) {
         resetFormatTable('未找到可用格式')
@@ -582,6 +619,8 @@ export function useBili2Vrc() {
             scale_bitrate_with_speed: scaleBitrateWithSpeed.value,
             tonemap_hdr: Boolean(tonemapHdr.value && selectedIsHdr.value),
             tonemap_algorithm: tonemapAlgorithm.value || 'mobius',
+            embed_captions: Boolean(embedCaptions.value && captionTracks.value.length),
+            caption_lang: captionLang.value,
           }),
         ),
       })
@@ -767,6 +806,11 @@ export function useBili2Vrc() {
     tonemapAlgorithm,
     tonemapAlgorithmOptions,
     tonemapAlgorithmHint,
+    embedCaptions,
+    embedCaptionsHint,
+    captionTracks,
+    captionLang,
+    captionTrackLabel,
     selectedIsHdr,
     effectiveOutputCodec,
     encodeCrf,

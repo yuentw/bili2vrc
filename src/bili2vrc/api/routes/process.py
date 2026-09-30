@@ -70,6 +70,8 @@ def process_route(body: ProcessRequest):
     )
     tonemap_hdr = bool(body.tonemap_hdr)
     tonemap_algorithm = hwaccel.normalize_tonemap_algorithm(body.tonemap_algorithm)
+    embed_captions = bool(body.embed_captions)
+    caption_lang = (body.caption_lang or "").strip()
 
     cookie_content = (body.cookie_content or "").strip() or None
 
@@ -89,9 +91,9 @@ def process_route(body: ProcessRequest):
             return JSONResponse({"error": str(exc)}, status_code=400)
 
     logger.info(
-        "api/process: format_id=%s ttl=%s compat=%s speed=%sx codec=%s mode=%s quality=%s crf=%s bitrate=%skbps scale_speed=%s tonemap_hdr=%s tonemap_algo=%s platform=%s cookie_used=%s",
+        "api/process: format_id=%s ttl=%s compat=%s speed=%sx codec=%s mode=%s quality=%s crf=%s bitrate=%skbps scale_speed=%s tonemap_hdr=%s tonemap_algo=%s captions=%s lang=%s platform=%s cookie_used=%s",
         format_id, ttl, compat_mode, playback_speed, output_codec, encode_mode, encode_quality, encode_crf, bitrate_kbps,
-        scale_bitrate_with_speed, tonemap_hdr, tonemap_algorithm, url_platform, bool(cookie_content),
+        scale_bitrate_with_speed, tonemap_hdr, tonemap_algorithm, embed_captions, caption_lang, url_platform, bool(cookie_content),
     )
 
     status = job_queue.queue_status()
@@ -124,6 +126,8 @@ def process_route(body: ProcessRequest):
         encode_crf=encode_crf,
         tonemap_hdr=tonemap_hdr,
         tonemap_algorithm=tonemap_algorithm,
+        embed_captions=embed_captions,
+        caption_lang=caption_lang,
         cookie_path=cookie_path,
     )
     if not job_id:

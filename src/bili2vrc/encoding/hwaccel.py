@@ -791,18 +791,21 @@ def compose_video_filter(
     source_fps: float | None = None,
     tonemap_hdr: bool = False,
     tonemap_algorithm: str | None = None,
+    subtitle_filter: str | None = None,
 ) -> str:
-    """Build video filter chain: optional speed + CFR + tonemap + format + optional hw upload."""
+    """Build video filter chain: tonemap, hardsub on source time, then speed, then format / hw upload."""
     parts: list[str] = []
     out_fps = resolve_output_fps(source_fps)
+    if tonemap_hdr:
+        parts.append(hdr_tonemap_filter(tonemap_algorithm))
+    if subtitle_filter:
+        parts.append(subtitle_filter)
     if abs(float(speed) - 1.0) > 1e-6:
         parts.append(f"setpts=PTS/{speed}")
         parts.append(f"fps={out_fps}")
         parts.append("setpts=PTS-STARTPTS")
     elif _is_qsv_encoder(encoder.name):
         parts.append(f"fps={out_fps}")
-    if tonemap_hdr:
-        parts.append(hdr_tonemap_filter(tonemap_algorithm))
     parts.append(encoder.format_filter)
     if encoder.hw_video_filter:
         parts.append(encoder.hw_video_filter)

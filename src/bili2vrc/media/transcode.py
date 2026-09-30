@@ -10,6 +10,7 @@ import time
 from bili2vrc import config
 from bili2vrc.constants import clamp_playback_speed
 from bili2vrc.encoding import hwaccel
+from bili2vrc.media.captions import ffmpeg_subtitles_filter
 from bili2vrc.media.mp4 import probe_has_audio
 
 logger = logging.getLogger("bili2vrchat")
@@ -92,6 +93,7 @@ def transcode_video(
     scale_bitrate_with_speed: bool = True,
     tonemap_hdr: bool = False,
     tonemap_algorithm: str | None = None,
+    subtitle_path: str | None = None,
     cancel_event: threading.Event | None = None,
     register_proc=None,
 ) -> bool:
@@ -139,6 +141,7 @@ def transcode_video(
         encode_crf=encode_crf,
         tonemap_hdr=tonemap_hdr,
         tonemap_algorithm=tonemap_algorithm,
+        subtitle_filter=ffmpeg_subtitles_filter(subtitle_path) if subtitle_path else None,
         cancel_event=cancel_event,
         register_proc=register_proc,
     )
@@ -172,6 +175,7 @@ def _transcode_video_try(
     encode_crf: int | None,
     tonemap_hdr: bool,
     tonemap_algorithm: str | None,
+    subtitle_filter: str | None,
     cancel_event: threading.Event | None,
     register_proc,
 ) -> bool:
@@ -200,6 +204,7 @@ def _transcode_video_try(
             source_fps=source_fps,
             tonemap_hdr=tonemap_hdr,
             tonemap_algorithm=tonemap_algorithm,
+            subtitle_filter=subtitle_filter,
         )
         out_fps = hwaccel.resolve_output_fps(source_fps)
         decode_args = hwaccel.decode_hwaccel_args(encoder)

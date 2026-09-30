@@ -37,6 +37,8 @@ class QueuedJob:
     encode_crf: int | None = None
     tonemap_hdr: bool = False
     tonemap_algorithm: str = "mobius"
+    embed_captions: bool = False
+    caption_lang: str = ""
     cookie_path: str | None = None
 
 
@@ -89,6 +91,8 @@ class JobQueue:
         encode_crf: int | None,
         tonemap_hdr: bool,
         tonemap_algorithm: str,
+        embed_captions: bool,
+        caption_lang: str,
         cookie_path: str | None,
     ) -> str | None:
         with self._lock:
@@ -113,6 +117,8 @@ class JobQueue:
                 encode_crf=encode_crf,
                 tonemap_hdr=tonemap_hdr,
                 tonemap_algorithm=tonemap_algorithm,
+                embed_captions=embed_captions,
+                caption_lang=caption_lang,
                 cookie_path=cookie_path,
             )
             self._jobs_by_id[job_id] = job
@@ -198,6 +204,8 @@ class JobQueue:
                     job.encode_crf,
                     job.tonemap_hdr,
                     job.tonemap_algorithm,
+                    job.embed_captions,
+                    job.caption_lang,
                     job.cookie_path,
                     job.job_id,
                     cancel_event,

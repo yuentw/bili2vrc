@@ -21,6 +21,8 @@ class ProcessRequest(BaseModel):
     output_codec: str | None = None
     tonemap_hdr: bool = False
     tonemap_algorithm: str | None = None
+    embed_captions: bool = False
+    caption_lang: str = ""
     cookie_content: str | None = None
 
 

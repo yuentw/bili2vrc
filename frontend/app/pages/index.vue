@@ -347,6 +347,22 @@ function onResultVideoLoad() {
               </label>
               <div class="field-hint">{{ app.tonemapHdrHint }}</div>
             </div>
+            <div v-if="app.captionTracks.length" class="field field-full">
+              <label class="compat-check">
+                <input type="checkbox" v-model="app.embedCaptions">
+                <span>嵌入 YouTube 字幕</span>
+              </label>
+              <div class="field-hint">{{ app.embedCaptionsHint }}</div>
+              <select v-if="app.embedCaptions" v-model="app.captionLang">
+                <option
+                  v-for="track in app.captionTracks"
+                  :key="track.lang"
+                  :value="track.lang"
+                >
+                  {{ app.captionTrackLabel(track) }}
+                </option>
+              </select>
+            </div>
           </div>
 
           <details v-if="app.showAdvancedEncoding" class="advanced-options">

@@ -4,6 +4,7 @@ import subprocess
 
 from bili2vrc.download.cookies import get_cookie_args, temp_cookie_file
 from bili2vrc.download.ytdlp import get_ytdlp_js_args
+from bili2vrc.media.captions import extract_caption_tracks
 from bili2vrc.utils.formatting import (
     format_duration,
     format_size,
@@ -134,4 +135,5 @@ def fetch_formats(url: str, cookie_content: str | None) -> dict:
         "formats": video_formats,
         "platform": url_platform,
         "cookie_used": bool(cookie_content),
+        "captions": extract_caption_tracks(info) if url_platform == "youtube" else [],
     }

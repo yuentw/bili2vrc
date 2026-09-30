@@ -4,6 +4,7 @@ import logging
 import os
 import queue
 import re
+import shutil
 import subprocess
 import threading
 import urllib.parse
@@ -13,6 +14,13 @@ from bili2vrc.constants import clamp_playback_speed
 from bili2vrc.download.cookies import get_cookie_args
 from bili2vrc.download.ytdlp import get_aria2c_cmd, get_ytdlp_js_args, should_use_aria2c
 from bili2vrc.encoding import hwaccel
+from bili2vrc.media.captions import (
+    download_caption_vtt,
+    ffmpeg_has_subtitles_filter,
+    is_caption_lang,
+    probe_video_size,
+    write_youtube_style_ass,
+)
 from bili2vrc.media.mp4 import apply_faststart, verify_mp4
 from bili2vrc.media.transcode import transcode_video
 from bili2vrc.services.process_controller import process_controller
@@ -38,6 +46,8 @@ def run_process(
     encode_crf: int | None,
     tonemap_hdr: bool,
     tonemap_algorithm: str,
+    embed_captions: bool,
+    caption_lang: str,
     cookie_path: str | None,
     job_id: str,
     cancel_event: threading.Event,
@@ -46,6 +56,7 @@ def run_process(
     """在子執行緒中執行；用 event_queue 回傳進度事件"""
 
     output_path = None
+    caption_dir = None
     register_proc = process_controller.register_proc
 
     def emit(step: str, message: str, **extra):
@@ -71,9 +82,10 @@ def run_process(
 
     try:
         logger.info(
-            "process start: job=%s url=%s format_id=%s ttl=%s compat=%s speed=%sx mode=%s quality=%s bitrate=%skbps scale_speed=%s tonemap_hdr=%s tonemap_algo=%s",
+            "process start: job=%s url=%s format_id=%s ttl=%s compat=%s speed=%sx mode=%s quality=%s bitrate=%skbps scale_speed=%s tonemap_hdr=%s tonemap_algo=%s captions=%s lang=%s",
             job_id, url, format_id, ttl, compat_mode, clamp_playback_speed(playback_speed),
             encode_mode, encode_quality, bitrate_kbps, scale_bitrate_with_speed, tonemap_hdr, tonemap_algorithm,
+            embed_captions, caption_lang,
         )
         if abort_if_cancelled():
             return
@@ -195,6 +207,45 @@ def run_process(
         if abort_if_cancelled():
             return
 
+        caption_ass = None
+        burn_captions = bool(embed_captions)
+        if burn_captions and detect_platform(url) != "youtube":
+            emit("captions", "非 YouTube，略過字幕")
+            burn_captions = False
+        if burn_captions:
+            lang = (caption_lang or "").strip()
+            if not is_caption_lang(lang):
+                emit_error("字幕語言無效，未上傳")
+                return
+            if not ffmpeg_has_subtitles_filter():
+                emit_error("ffmpeg 沒有 subtitles 濾鏡，無法燒錄字幕，未上傳")
+                return
+            emit("captions", f"下載字幕（{lang}）...")
+            caption_dir = os.path.join(config.TEMP_DIR, f"{video_id}_caps")
+            vtt_path = download_caption_vtt(
+                url,
+                lang,
+                caption_dir,
+                cookie_args=cookie_args,
+                ytdlp_js_args=get_ytdlp_js_args(),
+            )
+            if abort_if_cancelled():
+                return
+            if not vtt_path:
+                emit_error("找不到這條字幕，未上傳")
+                return
+            play_width, play_height = probe_video_size(output_path)
+            caption_ass = os.path.join(caption_dir, "captions.ass")
+            if not write_youtube_style_ass(
+                vtt_path,
+                caption_ass,
+                play_width=play_width,
+                play_height=play_height,
+            ):
+                emit_error("字幕是空的，未上傳")
+                return
+            emit("captions", "字幕已套用 YouTube 樣式，將燒進畫面")
+
         speed = clamp_playback_speed(playback_speed)
         effective_codec = config.normalize_output_codec(output_codec, compat_mode=compat_mode)
         needs_transcode = (
@@ -202,6 +253,7 @@ def run_process(
             or abs(speed - 1.0) > 1e-6
             or effective_codec in ("av1", "h265")
             or tonemap_hdr
+            or bool(caption_ass)
         )
 
         if needs_transcode:
@@ -235,6 +287,8 @@ def run_process(
                 suffix = "_stretch.mp4"
             elif tonemap_hdr:
                 suffix = f"_{effective_codec}_sdr.mp4"
+            elif caption_ass:
+                suffix = f"_{effective_codec}_sub.mp4"
             else:
                 suffix = f"_{effective_codec}.mp4"
             out_path = output_path.replace(".mp4", suffix)
@@ -251,6 +305,7 @@ def run_process(
                 scale_bitrate_with_speed=scale_bitrate_with_speed,
                 tonemap_hdr=tonemap_hdr,
                 tonemap_algorithm=tonemap_algorithm,
+                subtitle_path=caption_ass,
                 cancel_event=cancel_event,
                 register_proc=register_proc,
             )
@@ -264,6 +319,10 @@ def run_process(
                 done_step = "stretch" if abs(speed - 1.0) > 1e-6 and not compat_mode else "reencode"
                 emit(done_step, f"處理完成  ({format_size(file_size)})")
             else:
+                if caption_ass:
+                    logger.error("caption burn-in failed; abort upload")
+                    emit_error("字幕燒錄失敗，未上傳")
+                    return
                 if abs(speed - 1.0) > 1e-6:
                     logger.error("speed stretch failed; abort upload")
                     emit_error("時間拉伸失敗（未套用倍速）。請重試，或改選 H264 輸出模式再試")
@@ -355,5 +414,7 @@ def run_process(
                 logger.debug("cookie temp removed: %s", cookie_path)
             except Exception as exc:
                 logger.warning("cookie temp cleanup failed: %s (%s)", cookie_path, exc)
+        if caption_dir and os.path.isdir(caption_dir):
+            shutil.rmtree(caption_dir, ignore_errors=True)
         process_controller.clear(job_id)
         event_queue.put(None)
